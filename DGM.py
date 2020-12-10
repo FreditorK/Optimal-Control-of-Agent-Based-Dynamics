@@ -34,10 +34,10 @@ class DGMSolver:
 
     def u(self, x, t):
         with torch.no_grad():
-            x = torch.FloatTensor(x).unsqueeze(0)
-            t = torch.FloatTensor(t).unsqueeze(0)
+            x = torch.FloatTensor([x]).unsqueeze(0)
+            t = torch.FloatTensor([t]).unsqueeze(0)
             u = self.f_theta(x, t)
-        return u
+        return u.numpy().flatten()[0]
 
     def save(self, path):
         torch.save(self.saveables, path)
