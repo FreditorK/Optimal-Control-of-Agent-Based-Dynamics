@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 
 #  Network configurations
 MODEL_CONFIG_1 = {
-    "batch_size": 1,
-    "hidden_dim": 128,
+    "batch_size": 128,
+    "hidden_dim": 256,
     "learning_rate": 1e-4
 }
 
@@ -14,6 +14,8 @@ MODEL_CONFIG_1 = {
 BURGERS_CONFIG = {
     "x_dim": 1,
     "equation": lambda u, x, t: d(u, t) + u * d(u, x),
+    "boundary_cond": lambda u, x, t: u*0,
+    "boundary_func": lambda random, x: x,
     "init_datum": lambda u, x: x - u
 }
 burgers_sol = lambda x, t: x / (1 + t)
@@ -21,6 +23,8 @@ burgers_sol = lambda x, t: x / (1 + t)
 VISCOUS_BURGERS_CONFIG = {
     "x_dim": 1,
     "equation": lambda u, x, t: d(u, t) + (1/2) * d(u*u, x) - 0.5*dd(u, x),
+    "boundary_cond": lambda u, x, t: u,
+    "boundary_func": lambda x: 1.0 if x > 0.0 else -1.0,
     "init_datum": lambda u, x: x - u
 }
 
