@@ -2,12 +2,13 @@ from operators import d, dd
 from DGM import DGMSolver
 import argparse
 import matplotlib.pyplot as plt
+import numpy as np
 
 #  Network configurations
 MODEL_CONFIG_1 = {
-    "batch_size": 128,
+    "batch_size": 256,
     "hidden_dim": 256,
-    "learning_rate": 1e-4
+    "learning_rate": 1e-6
 }
 
 #  PDE configurations
@@ -35,7 +36,5 @@ if __name__ == "__main__":
 
     solver = DGMSolver(MODEL_CONFIG_1, VISCOUS_BURGERS_CONFIG)
     losses = list(solver.train(args.it))
-    plt.plot(losses)
+    plt.plot(np.convolve(losses, np.ones(10), 'valid') / 10)
     plt.show()
-    print("Real solution: {}".format(burgers_sol(0.3, 0.1)))
-    print("Approx solution: {}".format(solver.u(0.3, 0.1)))

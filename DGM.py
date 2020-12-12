@@ -1,7 +1,6 @@
 from sampling import Sampler, BoundarySampler
 from networks import f_theta
-from torch.optim import Adam, SGD
-from torch.autograd import Variable
+from torch.optim import Adam
 from tqdm import tqdm
 import torch
 import os.path
@@ -9,7 +8,7 @@ import os.path
 
 class DGMSolver:
 
-    def __init__(self, model_config, pde_config, weights=(0.33, 0.33, 0.33)):
+    def __init__(self, model_config, pde_config, weights=(1, 1, 1)):
         self.batch_size = model_config["batch_size"]
         self.batch_split = int(self.batch_size / 2)
         self.sampler = Sampler(pde_config["x_dim"])
