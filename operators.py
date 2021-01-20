@@ -2,11 +2,17 @@ from torch.autograd import grad
 import torch
 
 
-def d(u, var):
-    return grad(outputs=u, inputs=var, grad_outputs=torch.ones_like(u), retain_graph=True)[0]
+def div(u, vars):
+    '''
+    Tensor:param u:
+    Tensor:param vars:
+    Tensor:return: sum of gradients/divergence of u w.r.t vars
+    '''
+    # grad computes J*v, where J is the Jacobian of u and v is grad_outputs
+    return torch.sum(grad(outputs=u, inputs=vars, grad_outputs=torch.ones_like(u))[0], dim=-2)
 
 
-def dd(u, var_1):
-    du = grad(outputs=u, inputs=var_1, grad_outputs=torch.ones_like(u), retain_graph=True, create_graph=True)[0]
-    ddu = grad(outputs=du, inputs=var_1, grad_outputs=torch.ones_like(u), retain_graph=True)[0]
-    return ddu
+def Δ(u, vars):
+    u_grad = torch.autograd.grad(u, vars, create_graph=True)[0]
+    u_hess_diag = torch.autograd.grad(u_grad, vars, create_graph=True, grad_outputs=torch.ones_like(u_grad))[0]
+    return torch.sum(u_hess_diag, dim=-2)
