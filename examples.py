@@ -13,7 +13,7 @@ MODEL_CONFIG_1 = {
 
 #  PDE configurations
 BURGERS_CONFIG = {
-    "x_dim": 5,
+    "x_dim": 1,
     "equation": lambda u, x, t: div(u, t) + u * div(u, x),
     "boundary_cond": lambda u, x, t: u*0,
     "boundary_func": lambda x: x,
@@ -22,7 +22,7 @@ BURGERS_CONFIG = {
 burgers_sol = lambda x, t: x / (1 + t)
 
 VISCOUS_BURGERS_CONFIG = {
-    "x_dim": 2,
+    "x_dim": 1,
     "equation": lambda u, x, t: div(u, t) + u * div(u, x) - 0.5 * Δ(u, x),
     "boundary_cond": lambda u, x, t: u,
     "boundary_func": lambda x: 1.0 if x > 0.0 else -1.0,
@@ -34,7 +34,7 @@ if __name__ == "__main__":
     parser.add_argument('--it', nargs="?", type=int, default=3000, help='number of iterations')
     args = parser.parse_args()
 
-    solver = DGMSolver(MODEL_CONFIG_1, BURGERS_CONFIG)
+    solver = DGMSolver(MODEL_CONFIG_1, VISCOUS_BURGERS_CONFIG)
     losses = list(solver.train(args.it))
     plt.plot(np.convolve(losses, np.ones(10), 'valid') / 10)
     plt.show()
