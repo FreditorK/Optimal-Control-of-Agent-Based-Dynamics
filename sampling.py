@@ -1,5 +1,4 @@
 import torch
-from numpy.random import rand
 
 
 class Sampler:
