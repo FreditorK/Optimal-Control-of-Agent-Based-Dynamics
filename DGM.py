@@ -11,12 +11,12 @@ class DGMSolver:
     def __init__(self, model_config, pde_config, weights=(1, 1, 1)):
         self.batch_size = model_config["batch_size"]
         self.batch_split = int(self.batch_size / 2)
-        self.sampler = Sampler(pde_config["x_dim"])
-        self.boundary_sampler = BoundarySampler(pde_config["x_dim"], pde_config["boundary_func"])
-        self.f_theta = f_theta(input_dim=(pde_config["x_dim"], 1), hidden_dim=model_config["hidden_dim"], output_dim=1)
-        self.domain_criterion = lambda u, x, t: weights[0] * torch.square(pde_config["equation"](u, x, t)).mean()
-        self.boundary_criterion = lambda u, x, t: weights[1] * torch.square(pde_config["boundary_cond"](u, x, t)).mean()
-        self.init_criterion = lambda u, x: weights[2] * torch.square(pde_config["init_datum"](u, x)).mean()
+        self.sampler = Sampler(pde_config.x_dim)
+        self.boundary_sampler = BoundarySampler(pde_config.x_dim, pde_config.boundary_func)
+        self.f_theta = f_theta(input_dim=(pde_config.x_dim, 1), hidden_dim=model_config["hidden_dim"], output_dim=1)
+        self.domain_criterion = lambda u, x, t: weights[0] * torch.square(pde_config.equation(u, x, t)).mean()
+        self.boundary_criterion = lambda u, x, t: weights[1] * torch.square(pde_config.boundary_cond(u, x, t)).mean()
+        self.init_criterion = lambda u, x: weights[2] * torch.square(pde_config.init_datum(u, x)).mean()
         self.optimizer = Adam(self.f_theta.parameters(), lr=model_config["learning_rate"])
         self.saveables = {
             "f_theta": self.f_theta,
@@ -35,9 +35,9 @@ class DGMSolver:
             domain_u = self.f_theta(domain_x_sample, domain_t_sample)
             boundary_u = self.f_theta(boundary_x_sample, boundary_t_sample)
 
-            loss = self.domain_criterion(u=domain_u, x=domain_x_sample, t=domain_t_sample) \
-                   + self.boundary_criterion(u=boundary_u, x=boundary_x_sample, t=boundary_t_sample) \
-                   + self.init_criterion(u=domain_u, x=domain_x_sample)
+            loss = self.init_criterion(u=domain_u, x=domain_x_sample)\
+                   + self.boundary_criterion(u=boundary_u, x=boundary_x_sample, t=boundary_t_sample)\
+                   + self.domain_criterion(u=domain_u, x=domain_x_sample, t=domain_t_sample)
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()

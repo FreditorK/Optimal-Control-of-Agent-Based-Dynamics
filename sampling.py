@@ -10,7 +10,7 @@ class Sampler:
         return torch.rand(size=(batch_size, 1))
 
     def sample_x(self, batch_size):
-        return -2 * torch.rand(size=(batch_size, self.x_dim)) + 1.0
+        return torch.rand(size=(batch_size, self.x_dim))
 
 
 class BoundarySampler:
@@ -23,4 +23,4 @@ class BoundarySampler:
         return torch.rand(size=(batch_size, 1))
 
     def sample_x(self, batch_size):
-        return (-2 * torch.rand(size=(batch_size, self.x_dim)) + 1.0).apply_(self.boundary_func)
+        return torch.rand(size=(batch_size, self.x_dim)).apply_(self.boundary_func)

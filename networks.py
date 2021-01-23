@@ -8,9 +8,9 @@ class f_theta(nn.Module):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(sum(input_dim), hidden_dim),
-            nn.ReLU(),
+            nn.ELU(),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
+            nn.ELU(),
             nn.Linear(hidden_dim, output_dim)
         )
 
