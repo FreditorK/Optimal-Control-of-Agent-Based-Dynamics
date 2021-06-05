@@ -1,36 +1,34 @@
-from abc import ABC, abstractmethod
 
-
-class PDE(ABC):
+class PDE:
     """
     x_dim: Dimension of the collective variable vector
-    equation: PDE to solve
-    boundary_cond: Boundary condition, e.g. Dirichlet, Neumann, Robin, etc.
+    domain_func: Function mapping the sampling space to the domain \ boundary
     boundary_func: Function mapping the sampling space to the boundary
-    init_datum: Initial datum, i.e. value of u at time t=0
+    equation: PDE to solve, function of (u, x, t)
+    boundary_cond: Boundary condition, e.g. Dirichlet, Neumann, Robin, etc., function of (u, x, t)
+    init_datum: Initial datum, i.e. value of u at time t=0, function of (u, x)
     """
-    @property
-    @abstractmethod
-    def x_dim(self):
-        pass
 
-    @property
-    @abstractmethod
-    def equation(self):
-        pass
+    def __init__(self):
+        self.x_dim = None
+        self.equation = None
+        self.boundary_cond = lambda u, x, t: u * 0
+        self.init_datum = lambda u, x: u * 0
+        self.domain_func = lambda x: x
+        self.boundary_func = lambda x: x
 
-    @property
-    @abstractmethod
-    def boundary_cond(self):
-        pass
 
-    @property
-    @abstractmethod
-    def boundary_func(self):
-        pass
+class HBJ:
+    """
+    cost_function: Cost function for main trajectory, function of (u, x, t), F(u, x, t)
+    terminal_cost: Terminal cost at time T of the trajectory, function of (x), G(x)
+    differential_operator: Differential operator of the HBJ-equation, function of (J, u, x, t), L
+    """
 
-    @property
-    @abstractmethod
-    def init_datum(self):
-        pass
-
+    def __init__(self):
+        self.var_dims = []
+        self.sampling_funcs = []
+        self.cost_function = None
+        self.terminal_cost = None
+        self.differential_operator = None
+        self.control_output = lambda x: x
