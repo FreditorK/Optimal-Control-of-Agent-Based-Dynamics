@@ -5,6 +5,7 @@ from torch.optim import Adam
 from tqdm import tqdm
 from abc import ABC, abstractmethod
 from optimisers import Ralamb, RangerLars
+import numpy as np
 from torch.optim.lr_scheduler import StepLR, ReduceLROnPlateau, CosineAnnealingWarmRestarts
 import torch
 import os.path
@@ -61,9 +62,19 @@ class DGMSolver(Solver):
         Deep Galerkin PDE Solver
         """
         super().__init__(model_config)
-        self.domain_sampler = SAMPLING_METHODS[self.sampling_method](device=self.device)
-        self.boundary_sampler = SAMPLING_METHODS[self.sampling_method](device=self.device)
+        assert len(pde_config.boundary_cond) == len(pde_config.boundary_func), "Number of boundary " \
+                                                                               "conditions does not match" \
+                                                                               "number of sampling functions!"
+        assert len(pde_config.init_datum) == len(pde_config.init_func), "Number of initial " \
+                                                                        "conditions does not match" \
+                                                                        "number of sampling functions!"
         self.pde_config = pde_config
+        self.boundary_batch_size = self.batch_size - (self.batch_size % len(pde_config.boundary_cond))
+        self.init_batch_size = self.batch_size - (self.batch_size % len(pde_config.init_datum))
+        self.domain_sampler = SAMPLING_METHODS[self.sampling_method](pde_config.domain_func, device=self.device)
+        self.boundary_sampler = SAMPLING_METHODS[self.sampling_method](pde_config.boundary_func, device=self.device)
+        self.init_sampler = SAMPLING_METHODS[self.sampling_method](pde_config.init_func, device=self.device)
+        self.time_sampler = SAMPLING_METHODS[self.sampling_method]([lambda t: t], device=self.device)
         self.f_θ = BVPNetwork(input_dim=(pde_config.x_dim, 1),
                               hidden_dim=model_config["hidden_dim"],
                               output_dim=1).to(self.device)
@@ -72,16 +83,20 @@ class DGMSolver(Solver):
 
         self.domain_criterion = lambda u, x, t: model_config["loss_weights"][0] * torch.square(
             pde_config.equation(u, x, t)).mean()
-        if pde_config.boundary_cond is None:
-            self.boundary_criterion = lambda u, x, t: 0
-        else:
-            self.boundary_criterion = lambda u, x, t: \
-                model_config["loss_weights"][1] * torch.square(u - pde_config.boundary_cond(x, t)).mean()
-        if pde_config.init_datum is None:
-            self.init_criterion = lambda u, x: 0
-        else:
-            self.init_criterion = lambda u, x: \
-                model_config["loss_weights"][2] * torch.square(u - pde_config.init_datum(x)).mean()
+
+        b_size = int(self.boundary_batch_size / len(pde_config.boundary_cond))
+        self.boundary_criterion = lambda u, x, t: \
+            model_config["loss_weights"][1] * sum([torch.square(bc(u[i*b_size:(i+1)*b_size],
+                                                                   x[i*b_size:(i+1)*b_size],
+                                                                   t[i*b_size:(i+1)*b_size])).mean() for i, bc in
+                                                   enumerate(pde_config.boundary_cond)])
+
+        i_size = int(self.init_batch_size / len(pde_config.init_datum))
+        self.init_criterion = lambda u, x, t: \
+            model_config["loss_weights"][2] * sum([torch.square(ida(u[i*i_size:(i+1)*i_size],
+                                                                    x[i*i_size:(i+1)*i_size],
+                                                                    t[i*i_size:(i+1)*i_size])).mean() for i, ida in
+                                                   enumerate(pde_config.init_datum)])
 
         self.scheduler = ReduceLROnPlateau(self.f_θ_optimizer, 'min', factor=model_config["lr_decay"], min_lr=1e-10,
                                            patience=10)
@@ -99,16 +114,13 @@ class DGMSolver(Solver):
         return u.cpu().numpy().flatten()[0]
 
     def sample(self):
-        domain_t_sample = self.domain_sampler.sample_var(self.batch_size, 1).requires_grad_()
-        boundary_t_sample = self.boundary_sampler.sample_var(self.batch_size, 1).requires_grad_()
-        t_0_sample = torch.zeros_like(boundary_t_sample).to(self.device).requires_grad_()
+        domain_t_sample = self.time_sampler.sample_var(self.batch_size, 1).requires_grad_()
+        boundary_t_sample = self.time_sampler.sample_var(self.boundary_batch_size, 1).requires_grad_()
+        t_0_sample = torch.zeros((self.init_batch_size, 1)).to(self.device).requires_grad_()
 
-        domain_x_sample = self.domain_sampler.sample_var(self.batch_size, self.pde_config.x_dim,
-                                                         self.pde_config.domain_func).requires_grad_()
-        boundary_x_sample = self.boundary_sampler.sample_var(self.batch_size, self.pde_config.x_dim,
-                                                             self.pde_config.boundary_func).requires_grad_()
-        x_0_sample = self.domain_sampler.sample_var(self.batch_size, self.pde_config.x_dim,
-                                                    self.pde_config.init_func).requires_grad_()
+        domain_x_sample = self.domain_sampler.sample_var(self.batch_size, self.pde_config.x_dim).requires_grad_()
+        boundary_x_sample = self.boundary_sampler.sample_var(self.boundary_batch_size, self.pde_config.x_dim).requires_grad_()
+        x_0_sample = self.init_sampler.sample_var(self.init_batch_size, self.pde_config.x_dim).requires_grad_()
 
         return domain_t_sample, boundary_t_sample, t_0_sample, \
                domain_x_sample, boundary_x_sample, x_0_sample
@@ -120,7 +132,7 @@ class DGMSolver(Solver):
         domain_u_0 = self.f_θ(x_0_sample, t_0_sample)
 
         boundary_loss = self.boundary_criterion(u=boundary_u, x=boundary_x_sample, t=boundary_t_sample)
-        domain_loss = self.init_criterion(u=domain_u_0, x=x_0_sample) \
+        domain_loss = self.init_criterion(u=domain_u_0, x=x_0_sample, t=t_0_sample) \
                       + self.domain_criterion(u=domain_u, x=domain_x_sample, t=domain_t_sample)
 
         loss = domain_loss + boundary_loss

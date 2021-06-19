@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.optim import Adam
@@ -22,18 +23,24 @@ class RevGrad(Function):
 class GRLLayer(nn.Module):
     def __init__(self):
         super(GRLLayer, self).__init__()
+
     def forward(self, x):
         return RevGrad.apply(x)
 
 
 class UniformSampler:
 
-    def __init__(self, device):
+    def __init__(self, funcs: list, device):
         self.device = device
+        self.funcs = funcs
+        self.num_of_funcs = len(funcs)
 
-    def sample_var(self, batch_size, var_dim, domain_func=lambda x: x):
-        x = torch.rand(size=(batch_size, var_dim)).to(self.device)
-        return domain_func(x).detach()
+    def sample_var(self, batch_size: int, var_dim: int):
+        sampling_size = int(np.floor(batch_size/self.num_of_funcs))
+        x = []
+        for f in self.funcs:
+            x.append(f(torch.rand(size=(sampling_size, var_dim)).to(self.device)))
+        return torch.cat(x, dim=-1).detach()
 
 
 class GenerativeSampler(nn.Module):

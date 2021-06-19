@@ -12,11 +12,11 @@ class PDE:
     def __init__(self):
         self.x_dim = None
         self.equation = None
-        self.boundary_cond = None  # h(x, t)
-        self.init_datum = None  # g(x)
-        self.init_func = lambda x: x
-        self.domain_func = lambda x: x
-        self.boundary_func = lambda x: x
+        self.boundary_cond = []  # h(u, x, t)
+        self.init_datum = []  # g(u, x)
+        self.init_func = []  # f(x)
+        self.boundary_func = []  # f(x)
+        self.domain_func = []  # f(x)
 
 
 class HBJ:
