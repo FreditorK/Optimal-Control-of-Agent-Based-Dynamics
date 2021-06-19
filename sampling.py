@@ -22,7 +22,6 @@ class RevGrad(Function):
 class GRLLayer(nn.Module):
     def __init__(self):
         super(GRLLayer, self).__init__()
-
     def forward(self, x):
         return RevGrad.apply(x)
 

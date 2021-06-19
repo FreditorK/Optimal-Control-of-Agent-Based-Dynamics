@@ -12,8 +12,9 @@ class PDE:
     def __init__(self):
         self.x_dim = None
         self.equation = None
-        self.boundary_cond = lambda u, x, t: u * 0
-        self.init_datum = lambda u, x: u * 0
+        self.boundary_cond = None  # h(x, t)
+        self.init_datum = None  # g(x)
+        self.init_func = lambda x: x
         self.domain_func = lambda x: x
         self.boundary_func = lambda x: x
 
