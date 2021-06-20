@@ -13,7 +13,7 @@ class BVPNetwork(nn.Module):
         super().__init__()
 
         self.spatial_net = nn.Sequential(
-            nn.Linear(1, hidden_dim),
+            nn.Linear(input_dim-1, hidden_dim),
             nn.ELU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ELU(),
