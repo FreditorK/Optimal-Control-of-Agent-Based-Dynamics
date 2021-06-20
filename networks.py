@@ -13,7 +13,7 @@ class BVPNetwork(nn.Module):
         super().__init__()
 
         self.spatial_net = nn.Sequential(
-            nn.Linear(input_dim[0], hidden_dim),
+            nn.Linear(1, hidden_dim),
             nn.ELU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ELU(),
@@ -21,7 +21,7 @@ class BVPNetwork(nn.Module):
         )
 
         self.domain_net = nn.Sequential(
-            nn.Linear(sum(input_dim), hidden_dim),
+            nn.Linear(input_dim, hidden_dim),
             nn.ELU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ELU(),
@@ -30,9 +30,9 @@ class BVPNetwork(nn.Module):
 
         self.final_layer = nn.Linear(output_dim*2, output_dim)
 
-    def forward(self, x, t):
-        domain = self.domain_net(torch.cat((x, t), dim=1))
-        spatial = self.spatial_net(x)
+    def forward(self, *vars):
+        domain = self.domain_net(torch.cat(vars, dim=1))
+        spatial = self.spatial_net(torch.cat(vars[:-1], dim=1))
         return self.final_layer(torch.cat((domain, spatial), dim=1))
 
 

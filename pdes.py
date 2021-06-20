@@ -10,13 +10,13 @@ class PDE:
     """
 
     def __init__(self):
-        self.x_dim = None
+        self.var_dim = None
         self.equation = None
+        self.domain_func = []  # f(x)
         self.boundary_cond = []  # h(u, x, t)
         self.init_datum = []  # g(u, x)
         self.init_func = []  # f(x)
         self.boundary_func = []  # f(x)
-        self.domain_func = []  # f(x)
 
 
 class HBJ:

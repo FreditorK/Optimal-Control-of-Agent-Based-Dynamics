@@ -30,17 +30,21 @@ class GRLLayer(nn.Module):
 
 class UniformSampler:
 
-    def __init__(self, funcs: list, device):
+    def __init__(self, funcs: list, var_dim: int, device):
+        """
+        :param funcs: sampling functions for subdomains
+        :param var_funcs: sampling functions for each variable
+        :param device: cpu/gpu
+        """
         self.device = device
         self.funcs = funcs
-        self.num_of_funcs = len(funcs)
+        self.var_dim = var_dim
 
-    def sample_var(self, batch_size: int, var_dim: int):
-        sampling_size = int(np.floor(batch_size/self.num_of_funcs))
-        x = []
+    def sample_var(self, batch_size: int):
+        vars = []
         for f in self.funcs:
-            x.append(f(torch.rand(size=(sampling_size, var_dim)).to(self.device)))
-        return torch.cat(x, dim=0).detach()
+            vars.append(f([torch.rand(size=(batch_size, 1)).to(self.device).requires_grad_() for _ in range(self.var_dim)]))
+        return vars
 
 
 class GenerativeSampler(nn.Module):
