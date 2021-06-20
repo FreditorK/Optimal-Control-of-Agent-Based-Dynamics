@@ -1,4 +1,5 @@
 from torch.autograd import grad
+from torch.autograd.functional import jacobian
 import torch
 
 
@@ -25,7 +26,7 @@ def Δ(u, vars):
     Tensor (batch, x_dim):param vars: variables to differentiate in respect to
     Tensor (batch, 1):return: laplacian Δu w.r.t. vars
     """
-    u_grad_sum = torch.autograd.grad(u, vars, create_graph=True, grad_outputs=torch.ones_like(u))[0]
-    u_hess_diag = torch.autograd.grad(u_grad_sum, vars, create_graph=True, grad_outputs=torch.ones_like(u_grad_sum))[0]
+    u_grad_sum = grad(u, vars, create_graph=True, grad_outputs=torch.ones_like(u))[0]
+    u_hess_diag = grad(u_grad_sum, vars, create_graph=True, grad_outputs=torch.ones_like(u_grad_sum))[0]
     u_lap = torch.sum(u_hess_diag, dim=-1).unsqueeze(1)
     return u_lap

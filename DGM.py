@@ -1,5 +1,5 @@
 from sampling import SAMPLING_METHODS
-from networks import FeedForwardNet, DGMNetwork, BVPNetwork
+from networks import DGMNetwork, BVPNetwork
 from operators import div, grad, Δ
 from torch.optim import Adam
 from tqdm import tqdm

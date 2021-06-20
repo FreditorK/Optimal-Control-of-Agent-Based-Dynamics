@@ -40,7 +40,7 @@ class UniformSampler:
         x = []
         for f in self.funcs:
             x.append(f(torch.rand(size=(sampling_size, var_dim)).to(self.device)))
-        return torch.cat(x, dim=-1).detach()
+        return torch.cat(x, dim=0).detach()
 
 
 class GenerativeSampler(nn.Module):
