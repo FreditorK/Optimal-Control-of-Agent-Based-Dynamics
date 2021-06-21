@@ -1,5 +1,6 @@
 import torch.nn as nn
 import torch
+from torchdyn.models import NeuralDE
 
 
 class BVPNetwork(nn.Module):
@@ -13,7 +14,7 @@ class BVPNetwork(nn.Module):
         super().__init__()
 
         self.spatial_net = nn.Sequential(
-            nn.Linear(input_dim-1, hidden_dim),
+            nn.Linear(input_dim - 1, hidden_dim),
             nn.ELU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ELU(),
@@ -28,7 +29,7 @@ class BVPNetwork(nn.Module):
             nn.Linear(hidden_dim, output_dim)
         )
 
-        self.final_layer = nn.Linear(output_dim*2, output_dim)
+        self.final_layer = nn.Linear(output_dim * 2, output_dim)
 
     def forward(self, *vars):
         domain = self.domain_net(torch.cat(vars, dim=1))
@@ -40,7 +41,6 @@ class DGMNetwork(nn.Module):
 
     def __init__(self, input_dim, hidden_dim, output_dim):
         super(DGMNetwork, self).__init__()
-        input_dim = sum(input_dim)
         self.init_layer = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ELU()
@@ -88,3 +88,9 @@ class DGMLayer(nn.Module):
         H = self.H_activation(self.H_layer(x) + self.H_prev(S * R))
 
         return (1 - G) * H + Z * S
+
+
+NETWORK_TYPES = {
+    "BVP": BVPNetwork,
+    "DGM": DGMNetwork
+}

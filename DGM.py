@@ -1,11 +1,9 @@
 from sampling import SAMPLING_METHODS
-from networks import DGMNetwork, BVPNetwork
+from networks import NETWORK_TYPES
 from operators import div, grad, Δ
 from torch.optim import Adam
 from tqdm import tqdm
 from abc import ABC, abstractmethod
-from optimisers import Ralamb, RangerLars
-import numpy as np
 from torch.optim.lr_scheduler import StepLR, ReduceLROnPlateau, CosineAnnealingWarmRestarts
 import torch
 import os.path
@@ -26,6 +24,7 @@ class Solver(ABC):
 
         self.batch_size = model_config["batch_size"]
         self.sampling_method = model_config["sampling_method"]
+        self.network_type = model_config["network_type"]
 
         self.saveables = {}
 
@@ -70,9 +69,9 @@ class DGMSolver(Solver):
                                                                      device=self.device)
         self.boundary_sampler = SAMPLING_METHODS[self.sampling_method](pde_config.boundary_func, pde_config.var_dim,
                                                                        device=self.device)
-        self.f_θ = BVPNetwork(input_dim=pde_config.var_dim,
-                              hidden_dim=model_config["hidden_dim"],
-                              output_dim=1).to(self.device)
+        self.f_θ = NETWORK_TYPES[self.network_type](input_dim=pde_config.var_dim,
+                                                    hidden_dim=model_config["hidden_dim"],
+                                                    output_dim=1).to(self.device)
 
         self.f_θ_optimizer = Adam(self.f_θ.parameters(), lr=model_config["learning_rate"])
 
@@ -140,9 +139,9 @@ class DGMPIASolver(Solver):
         L = hbj_config.differential_operator
         self.hbj_config = hbj_config
         self.sampler = SAMPLING_METHODS[self.sampling_method](device=self.device)
-        self.f_θ = BVPNetwork(input_dim=(sum(hbj_config.var_dims), 1),
-                                  hidden_dim=model_config["hidden_dim"],
-                                  output_dim=1).to(self.device)  # value_function of (x, t)_u
+        self.f_θ = ODENetwork(input_dim=(sum(hbj_config.var_dims), 1),
+                              hidden_dim=model_config["hidden_dim"],
+                              output_dim=1).to(self.device)  # value_function of (x, t)_u
         self.g_φ = lambda t: (hbj_config.μ - hbj_config.r) / (hbj_config.σ ** 2 * (1 - hbj_config.γ) * hbj_config.γ)
         '''
         self.g_φ = nn.Sequential(FeedForwardNet(input_dim=[1],
