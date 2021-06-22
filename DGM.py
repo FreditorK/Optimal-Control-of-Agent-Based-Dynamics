@@ -76,11 +76,11 @@ class DGMSolver(Solver):
         self.f_θ_optimizer = Adam(self.f_θ.parameters(), lr=model_config["learning_rate"])
 
         self.domain_criterion = lambda u, var: \
-            model_config["loss_weights"][0] * torch.square(pde_config.equation(u, var)).mean()
+            model_config["loss_weights"][0] * torch.square(pde_config.equation(u, var))
 
         self.boundary_criterion = lambda us, vars: \
             model_config["loss_weights"][1] * sum(
-                [torch.square(bc(u, var)).mean() for u, var, bc in zip(us, vars, pde_config.boundary_cond)])
+                [torch.square(bc(u, var)) for u, var, bc in zip(us, vars, pde_config.boundary_cond)])
 
         self.scheduler = ReduceLROnPlateau(self.f_θ_optimizer, 'min', factor=model_config["lr_decay"], min_lr=1e-10,
                                            patience=10)
@@ -109,7 +109,9 @@ class DGMSolver(Solver):
         boundary_loss = self.boundary_criterion(boundary_us, vars=boundary_vars_sample)
         domain_loss = self.domain_criterion(domain_u, var=domain_var_sample)
 
-        loss = domain_loss + boundary_loss
+        self.domain_sampler.update(domain_loss)
+
+        loss = domain_loss.mean() + boundary_loss.mean()
 
         self.f_θ_optimizer.zero_grad()
         loss.backward()
