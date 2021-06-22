@@ -2,6 +2,8 @@ from torch.optim import Adam
 from torch import nn
 from truncated_normal import TruncatedNormal
 import torch
+from torch.distributions import Categorical
+from torch.distributions.mixture_same_family import MixtureSameFamily
 import numpy as np
 
 
@@ -40,7 +42,7 @@ class VariableUniformSampler:
         self.funcs = funcs
         self.var_dim = var_dim
         self.net = nn.Linear(var_dim, var_dim)
-        self.optimiser = Adam(self.net.parameters(), lr=0.1)
+        self.optimiser = Adam(self.net.parameters(), lr=0.0001)
         self.sample = None
         self.sigma_net = nn.Sequential(
             nn.Linear(8*var_dim, 16*var_dim),
@@ -58,18 +60,18 @@ class VariableUniformSampler:
     def sample_var(self, batch_size: int):
         vars = []
         for f in self.funcs:
-            sample = torch.rand(size=(batch_size, 8*self.var_dim)).to(self.device)
+            sample = torch.ones(size=(batch_size, 8*self.var_dim)).to(self.device)
             mu = self.mu_net(sample)
             sigma = self.sigma_net(sample)
             self.dist = TruncatedNormal(mu, sigma, 0, 1)
             self.sample = self.dist.sample()
             vars.append(
-                f([self.sample[:, i].unsqueeze(1).requires_grad_() for i in range(self.var_dim)]))
+                f([self.sample[:, i].detach().unsqueeze(1).requires_grad_() for i in range(self.var_dim)]))
         return vars
 
     def update(self, loss):
-        indices = torch.argsort(loss, descending=True)[:16]
-        var_biases = self.sample[indices].detach()
+        indices = torch.argmax(loss)
+        var_biases = self.sample[indices].expand_as(self.sample).detach()
         loss = -self.dist.log_prob(var_biases).mean()
         # maximise the liklihood of sampling from these points
         self.optimiser.zero_grad()

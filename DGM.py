@@ -109,8 +109,6 @@ class DGMSolver(Solver):
         boundary_loss = self.boundary_criterion(boundary_us, vars=boundary_vars_sample)
         domain_loss = self.domain_criterion(domain_u, var=domain_var_sample)
 
-        self.domain_sampler.update(domain_loss)
-
         loss = domain_loss.mean() + boundary_loss.mean()
 
         self.f_θ_optimizer.zero_grad()
@@ -118,6 +116,7 @@ class DGMSolver(Solver):
         self.f_θ_optimizer.step()
 
         self.scheduler.step(loss)
+        self.domain_sampler.update(domain_loss.detach())
 
         return loss.cpu().detach().flatten()[0].numpy()
 
