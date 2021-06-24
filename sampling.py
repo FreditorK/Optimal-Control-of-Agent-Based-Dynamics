@@ -43,7 +43,7 @@ class VariableUniformSampler:
         self.device = device
         self.funcs = funcs
         self.var_dim = var_dim
-        self.mu = 0
+        self.mu = 0.5
 
     def sample_var(self, batch_size: int):
         with torch.no_grad():

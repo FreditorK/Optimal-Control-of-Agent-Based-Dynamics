@@ -4,7 +4,8 @@ from operators import div, grad, Δ
 from torch.optim import Adam
 from tqdm import tqdm
 from abc import ABC, abstractmethod
-from torch.optim.lr_scheduler import StepLR, ReduceLROnPlateau, CosineAnnealingWarmRestarts
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+from optimisers import OPTIMIZERS
 import torch
 import os.path
 import torch.nn as nn
@@ -25,6 +26,7 @@ class Solver(ABC):
         self.batch_size = model_config["batch_size"]
         self.sampling_method = model_config["sampling_method"]
         self.network_type = model_config["network_type"]
+        self.optimiser = model_config["optimiser"]
 
         self.saveables = {}
 
@@ -73,7 +75,7 @@ class DGMSolver(Solver):
                                                     hidden_dim=model_config["hidden_dim"],
                                                     output_dim=1).to(self.device)
 
-        self.f_θ_optimizer = Adam(self.f_θ.parameters(), lr=model_config["learning_rate"])
+        self.f_θ_optimizer = OPTIMIZERS[self.optimiser](self.f_θ.parameters(), lr=model_config["learning_rate"])
 
         self.domain_criterion = lambda u, var: \
             model_config["loss_weights"][0] * torch.square(pde_config.equation(u, var))
@@ -116,7 +118,7 @@ class DGMSolver(Solver):
         self.f_θ_optimizer.step()
 
         self.scheduler.step(loss)
-        self.domain_sampler.update(domain_loss.detach())
+        self.domain_sampler.update(loss.detach())
 
         return loss.cpu().detach().flatten()[0].numpy()
 
@@ -135,15 +137,16 @@ class DGMPIASolver(Solver):
     def __init__(self, model_config, hbj_config):
         super(DGMPIASolver, self).__init__(model_config)
         F = hbj_config.cost_function
-        self.F = hbj_config.cost_function
-        G = hbj_config.terminal_cost
         L = hbj_config.differential_operator
-        self.hbj_config = hbj_config
-        self.sampler = SAMPLING_METHODS[self.sampling_method](device=self.device)
-        self.f_θ = ODENetwork(input_dim=(sum(hbj_config.var_dims), 1),
-                              hidden_dim=model_config["hidden_dim"],
-                              output_dim=1).to(self.device)  # value_function of (x, t)_u
-        self.g_φ = lambda t: (hbj_config.μ - hbj_config.r) / (hbj_config.σ ** 2 * (1 - hbj_config.γ) * hbj_config.γ)
+        self.boundary_batch_size = int(self.batch_size / len(hbj_config.boundary_func))
+        self.domain_sampler = SAMPLING_METHODS[self.sampling_method](hbj_config.domain_func, hbj_config.var_dim,
+                                                                     device=self.device)
+        self.boundary_sampler = SAMPLING_METHODS[self.sampling_method](hbj_config.boundary_func, hbj_config.var_dim,
+                                                                       device=self.device)
+        self.f_θ = NETWORK_TYPES[self.network_type](input_dim=hbj_config.var_dim,
+                                                    hidden_dim=model_config["hidden_dim"],
+                                                    output_dim=1).to(self.device) # value_function of (x, t)_u
+        self.g_φ = lambda t: (hbj_config.μ - hbj_config.r) / (hbj_config.σ ** 2 * hbj_config.γ)*torch.exp(hbj_config.r*t)
         '''
         self.g_φ = nn.Sequential(FeedForwardNet(input_dim=[1],
                                   hidden_dim=model_config["hidden_dim"],
@@ -155,12 +158,15 @@ class DGMPIASolver(Solver):
         self.f_θ_optimizer = Adam(self.f_θ.parameters(), lr=model_config["learning_rate"])
         # self.g_φ_optimizer = Adam(self.g_φ.parameters(), lr=model_config["learning_rate"])
 
-        self.differential_criterion = lambda J, u, x, t: model_config["loss_weights"][0] * torch.square(
-            div(J, t) + L(J, u, x, t) + F(u, x, t)).mean()
-        self.terminal_criterion = lambda J, x: model_config["loss_weights"][1] * torch.square(
-            J - G(x)).mean()
-        self.first_order_criterion = lambda J, u, x, t: - model_config["batch_size"] * model_config["loss_weights"][
-            2] * (L(J, u, x, t) + F(u, x, t)).mean()
+        self.differential_criterion = lambda J, u, var: model_config["loss_weights"][0] * torch.square(
+            div(J, var[-1]) + L(J, u, var[:-1], var[-1]) + F(u, var[:-1], var[-1]))
+        self.first_order_criterion = lambda J, u, var: -(L(J, u, var[:-1], var[-1]) + F(u, var[:-1], var[-1]))
+        self.boundary_criterion = lambda Js, vars: \
+            model_config["loss_weights"][1] * sum(
+                [torch.square(bc(J, var)) for J, var, bc in zip(Js, vars, hbj_config.boundary_cond)])
+
+        self.scheduler = ReduceLROnPlateau(self.f_θ_optimizer, 'min', factor=model_config["lr_decay"], min_lr=1e-10,
+                                           patience=10)
 
         self.saveables = {
             "f_theta": self.f_θ,
@@ -169,51 +175,40 @@ class DGMPIASolver(Solver):
             # "g_phi_optimizer": self.g_φ_optimizer
         }
 
-    def u(self, t):
+    def J(self, *args):
         with torch.no_grad():
-            t = torch.FloatTensor([t]).to(self.device).unsqueeze(0)
-            u = self.g_φ(t)
-        return u.cpu().numpy().flatten()[0]
-
-    def J(self, x, t):
-        with torch.no_grad():
-            x = torch.FloatTensor([x]).to(self.device).unsqueeze(0)
-            t = torch.FloatTensor([t]).to(self.device).unsqueeze(0)
-            j = self.f_θ(x, t)
-        return j.cpu().numpy().flatten()[0]
+            xs = [torch.FloatTensor([x]).to(self.device).unsqueeze(0) for x in args]
+            J = self.f_θ(*xs)
+        return J.cpu().numpy().flatten()[0]
 
     def sample(self):
-        t_sample = self.sampler.sample_var(self.batch_size, 1).requires_grad_()
-        T_sample = torch.ones_like(t_sample).to(self.device).requires_grad_()
+        domain_var_sample = self.domain_sampler.sample_var(self.batch_size)[0]  # (func(vars), batch, 1)
+        boundary_vars_sample = self.boundary_sampler.sample_var(self.boundary_batch_size)  # (subdomain(vars), batch, 1)
 
-        vars_samples = []
-        vars_T_samples = []
-        for var_dim, sampling_func in zip(self.hbj_config.var_dims, self.hbj_config.sampling_funcs):
-            vars_samples.append(self.sampler.sample_var(self.batch_size, var_dim, sampling_func).requires_grad_())
-            vars_T_samples.append(self.sampler.sample_var(self.batch_size, var_dim, sampling_func).requires_grad_())
+        return domain_var_sample, boundary_vars_sample
 
-        return t_sample, T_sample, vars_samples, vars_T_samples
-
-    def backprop_loss(self, t_sample, T_sample, vars_samples, vars_T_samples):
+    def backprop_loss(self, domain_var_sample, boundary_vars_sample):
         # value
-        u = self.g_φ(t_sample)  # .detach()
-        J = self.f_θ(*vars_samples, t_sample)
-        J_T = self.f_θ(*vars_T_samples, T_sample)
+        u = self.g_φ(domain_var_sample[-1])  # u(t)
+        J = self.f_θ(*domain_var_sample)  # J(x, t)
+        boundary_Js = [self.f_θ(*sample) for sample in boundary_vars_sample]  # e.g. terminal conditions
 
-        value_loss = self.differential_criterion(J, u, vars_samples, t_sample) \
-                     + self.terminal_criterion(J_T, T_sample)
+        value_loss = self.differential_criterion(J, u, domain_var_sample).mean() \
+                     + self.boundary_criterion(boundary_Js, boundary_vars_sample).mean()
 
         self.f_θ_optimizer.zero_grad()
         value_loss.backward()
         self.f_θ_optimizer.step()
 
         # control
-        u = self.g_φ(t_sample)
-        J = self.f_θ(*vars_samples, t_sample)
-        control_loss = self.first_order_criterion(J, u, vars_samples, t_sample)
+        #u = self.g_φ(domain_var_sample[-1])  # u(t)
+        #J = self.f_θ(*domain_var_sample)  # J(x, t)
+        #control_loss = self.first_order_criterion(J, u, domain_var_sample)
 
         # self.g_φ_optimizer.zero_grad()
         # control_loss.backward()
         # self.g_φ_optimizer.step()
 
-        return value_loss.cpu().detach().flatten()[0].numpy(), control_loss.cpu().detach().flatten()[0].numpy()
+        self.scheduler.step(value_loss)
+
+        return value_loss.cpu().detach().flatten()[0].numpy(), value_loss.cpu().detach().flatten()[0].numpy() #, control_loss.cpu().detach().flatten()[0].numpy()
