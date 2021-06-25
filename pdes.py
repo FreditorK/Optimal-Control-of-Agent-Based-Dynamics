@@ -29,7 +29,9 @@ class HBJ:
     def __init__(self):
         self.var_dim = None
         self.domain_func = []  # f(x)
-        self.boundary_cond = []  # h(u, x, t)
-        self.boundary_func = []  # f(x)
+        self.boundary_cond_J = []  # h(J, x, t)
+        self.boundary_func_J = []  # f(x)
+        self.boundary_cond_u = []  # h(u, x, t)
+        self.boundary_func_u = []  # f(x)
         self.cost_function = None  # F(u, x, t)
         self.differential_operator = None  # L(J, u, x, t)
