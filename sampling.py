@@ -20,10 +20,10 @@ class UniformSampler:
         self.funcs = funcs
         self.var_dim = var_dim
 
-    def sample_var(self, batch_size: int):
+    def sample_var(self):
         with torch.no_grad():
             vars = []
-            for f in self.funcs:
+            for f, batch_size in self.funcs:
                 vars.append(
                     f([torch.zeros(size=(batch_size, 1)).uniform_() for _ in range(self.var_dim)]))
         return [[f.to(self.device).requires_grad_() for f in fs] for fs in vars]
@@ -45,10 +45,10 @@ class VariableUniformSampler:
         self.var_dim = var_dim
         self.mu = 0.5
 
-    def sample_var(self, batch_size: int):
+    def sample_var(self):
         with torch.no_grad():
             vars = []
-            for f in self.funcs:
+            for f, batch_size in self.funcs:
                 mu = self.mu * torch.ones((batch_size, self.var_dim)).to(self.device)
                 dist = TruncatedNormal(mu, 1, 0, 1)
                 self.sample = dist.sample()

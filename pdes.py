@@ -13,6 +13,7 @@ class PDE:
         domain_func: Specifies the functions in composition with the sampler, e.g. We sample per function one batch each
         boundary_func: Same as domain functions but subject to the boundary conditions at the corresponding index
         """
+        self.sol_dim = 1
         self.var_dim = None
         self.equation = None
         self.domain_func = []  # f(x)
@@ -22,12 +23,16 @@ class PDE:
 
 class HBJ:
     """
-    cost_function: Cost function for main trajectory, function of (u, x, t), F(u, x, t)
-    differential_operator: Differential operator of the HBJ-equation, function of (J, u, x, t), L
+    int: var_dim_J: dimension of dependents of value function, e.g. J(x, t) -> 2, J(x, y, t) -> 3
+    list: control_vars: Indices indicating the subset of dependents, e.g. J(x, t) u(t) -> 1, J(x, t) u(x, t) -> 0, 1
+    function: cost_function: Cost function for main trajectory, function of (u, x, t), F(u, x, t)
+    function: differential_operator: Differential operator of the HBJ-equation, function of (J, u, x, t), L
     """
 
     def __init__(self):
-        self.var_dim = None
+        self.sol_dim = 1
+        self.var_dim_J = None
+        self.control_vars = []
         self.domain_func = []  # f(x)
         self.boundary_cond_J = []  # h(J, x, t)
         self.boundary_func_J = []  # f(x)

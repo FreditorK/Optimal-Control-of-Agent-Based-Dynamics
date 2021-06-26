@@ -90,7 +90,32 @@ class DGMLayer(nn.Module):
         return (1 - G) * H + Z * S
 
 
+class GRUNetwork(nn.Module):
+
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(GRUNetwork, self).__init__()
+        self.init_layer = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ELU()
+        )
+
+        self.layer_1 = nn.GRUCell(input_dim, hidden_dim)
+        self.layer_2 = nn.GRUCell(input_dim, hidden_dim)
+        self.layer_3 = nn.GRUCell(input_dim, hidden_dim)
+
+        self.output_layer = nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, *vars):
+        xt = torch.cat(vars, dim=1)
+        S = self.init_layer(xt)
+        S = self.layer_1(xt, S)
+        S = self.layer_2(xt, S)
+        S = self.layer_3(xt, S)
+        return self.output_layer(S)
+
+
 NETWORK_TYPES = {
     "BVP": BVPNetwork,
-    "DGM": DGMNetwork
+    "DGM": DGMNetwork,
+    "GRU": GRUNetwork
 }

@@ -73,7 +73,7 @@ class DGMSolver(Solver):
                                                                        device=self.device)
         self.f_θ = NETWORK_TYPES[self.network_type](input_dim=pde_config.var_dim,
                                                     hidden_dim=model_config["hidden_dim"],
-                                                    output_dim=1).to(self.device)
+                                                    output_dim=pde_config.sol_dim).to(self.device)
 
         self.f_θ_optimizer = OPTIMIZERS[self.optimiser](self.f_θ.parameters(), lr=model_config["learning_rate"])
 
@@ -99,8 +99,8 @@ class DGMSolver(Solver):
         return u.cpu().numpy().flatten()[0]
 
     def sample(self):
-        domain_var_sample = self.domain_sampler.sample_var(self.batch_size)[0]  # (func(vars), batch, 1)
-        boundary_vars_sample = self.boundary_sampler.sample_var(self.boundary_batch_size)  # (subdomain(vars), batch, 1)
+        domain_var_sample = self.domain_sampler.sample_var()[0]  # (func(vars), batch, 1)
+        boundary_vars_sample = self.boundary_sampler.sample_var()  # (subdomain(vars), batch, 1)
 
         return domain_var_sample, boundary_vars_sample
 
@@ -123,36 +123,28 @@ class DGMSolver(Solver):
         return loss.cpu().detach().flatten()[0].numpy()
 
 
-class Control_Output(nn.Module):
-    def __init__(self, function):
-        super().__init__()
-        self.function = function
-
-    def forward(self, x):
-        return self.function(x)
-
-
 class DGMPIASolver(Solver):
 
     def __init__(self, model_config, hbj_config):
         super(DGMPIASolver, self).__init__(model_config)
         F = hbj_config.cost_function
         L = hbj_config.differential_operator
+        self.control_vars = hbj_config.control_vars
         self.boundary_J_batch_size = int(self.batch_size / len(hbj_config.boundary_func_J))
         self.boundary_u_batch_size = int(self.batch_size / len(hbj_config.boundary_func_u))
-        self.domain_sampler = SAMPLING_METHODS[self.sampling_method](hbj_config.domain_func, hbj_config.var_dim,
+        self.domain_sampler = SAMPLING_METHODS[self.sampling_method](hbj_config.domain_func, hbj_config.var_dim_J,
                                                                      device=self.device)
-        self.boundary_sampler_J = SAMPLING_METHODS[self.sampling_method](hbj_config.boundary_func_J, hbj_config.var_dim,
+        self.boundary_sampler_J = SAMPLING_METHODS[self.sampling_method](hbj_config.boundary_func_J, hbj_config.var_dim_J,
                                                                          device=self.device)
-        self.boundary_sampler_u = SAMPLING_METHODS[self.sampling_method](hbj_config.boundary_func_u, 1,
+        self.boundary_sampler_u = SAMPLING_METHODS[self.sampling_method](hbj_config.boundary_func_u, len(self.control_vars),
                                                                          device=self.device)
-        self.f_θ = NETWORK_TYPES[self.network_type](input_dim=hbj_config.var_dim,
+        self.f_θ = NETWORK_TYPES[self.network_type](input_dim=hbj_config.var_dim_J,
                                                     hidden_dim=model_config["hidden_dim"],
-                                                    output_dim=1).to(self.device)  # value_function of (x, t)_u
+                                                    output_dim=1).to(self.device)  # value_function of (x, t)_J
 
-        self.g_φ = NETWORK_TYPES[self.network_type](input_dim=1,
-                                                    hidden_dim=int(model_config["hidden_dim"] / 2),
-                                                    output_dim=1).to(self.device)  # control_function of (x, t)_J
+        self.g_φ = NETWORK_TYPES[self.network_type](input_dim=len(self.control_vars),
+                                                    hidden_dim=model_config["hidden_dim"],
+                                                    output_dim=hbj_config.sol_dim).to(self.device)  # control_function of (x, t)_u
 
         self.f_θ_optimizer = OPTIMIZERS[self.optimiser](self.f_θ.parameters(), lr=model_config["learning_rate"])
         self.g_φ_optimizer = OPTIMIZERS[self.optimiser](self.g_φ.parameters(), lr=model_config["learning_rate"])
@@ -163,9 +155,9 @@ class DGMPIASolver(Solver):
         self.boundary_criterion_J = lambda Js, vars: \
             model_config["loss_weights"][1] * sum(
                 [torch.square(bc(J, var)) for J, var, bc in zip(Js, vars, hbj_config.boundary_cond_J)])
-        self.boundary_criterion_u = lambda us, ts: \
+        self.boundary_criterion_u = lambda us, vars: \
             model_config["loss_weights"][1] * sum(
-                [torch.square(bc(u, t)) for u, t, bc in zip(us, ts, hbj_config.boundary_cond_u)])
+                [torch.square(bc(u, var)) for u, var, bc in zip(us, vars, hbj_config.boundary_cond_u)])
 
         self.θ_scheduler = ReduceLROnPlateau(self.f_θ_optimizer, 'min', factor=model_config["lr_decay"], min_lr=1e-10,
                                              patience=10)
@@ -176,33 +168,31 @@ class DGMPIASolver(Solver):
             "f_theta": self.f_θ,
             "f_theta_optimizer": self.f_θ_optimizer,
             "g_phi": self.g_φ,
-            # "g_phi_optimizer": self.g_φ_optimizer
+            "g_phi_optimizer": self.g_φ_optimizer
         }
 
     def J(self, *args):
         with torch.no_grad():
-            xs = [torch.FloatTensor([x]).to(self.device).unsqueeze(0) for x in args]
-            J = self.f_θ(*xs)
+            vars = [torch.FloatTensor([x]).to(self.device).unsqueeze(0) for x in args]
+            J = self.f_θ(*vars)
         return J.cpu().numpy().flatten()[0]
 
-    def u(self, t):
+    def u(self, *args):
         with torch.no_grad():
-            t = torch.FloatTensor([t]).to(self.device).unsqueeze(0)
-            u = self.g_φ(t)
+            vars = [torch.FloatTensor([x]).to(self.device).unsqueeze(0) for x in args]
+            u = self.g_φ(*vars)
         return u.cpu().numpy().flatten()[0]
 
     def sample(self):
-        domain_var_sample = self.domain_sampler.sample_var(self.batch_size)[0]  # (func(vars), batch, 1)
-        boundary_vars_sample_J = self.boundary_sampler_J.sample_var(
-            self.boundary_J_batch_size)  # (subdomain(vars), batch, 1)
-        boundary_vars_sample_u = self.boundary_sampler_u.sample_var(
-            self.boundary_u_batch_size)  # (subdomain(vars), batch, 1)
+        domain_var_sample = self.domain_sampler.sample_var()[0]  # (func(vars), batch, 1)
+        boundary_vars_sample_J = self.boundary_sampler_J.sample_var()  # (subdomain(vars), batch, 1)
+        boundary_vars_sample_u = self.boundary_sampler_u.sample_var()  # (subdomain(vars), batch, 1)
 
         return domain_var_sample, boundary_vars_sample_J, boundary_vars_sample_u
 
     def backprop_loss(self, domain_var_sample, boundary_vars_sample_J, boundary_vars_sample_u):
         # value
-        u = self.g_φ(domain_var_sample[-1])  # u(t)
+        u = self.g_φ(*[domain_var_sample[i] for i in self.control_vars])  # u(t)
         J = self.f_θ(*domain_var_sample)  # J(x, t)
         boundary_Js = [self.f_θ(*sample) for sample in boundary_vars_sample_J]  # e.g. terminal conditions
 
@@ -214,7 +204,7 @@ class DGMPIASolver(Solver):
         self.f_θ_optimizer.step()
 
         # control
-        u = self.g_φ(domain_var_sample[-1])  # u(t)
+        u = self.g_φ(*[domain_var_sample[i] for i in self.control_vars])  # u(t)
         boundary_us = [self.g_φ(*sample) for sample in boundary_vars_sample_u]  # e.g. control output restrictions
         J = self.f_θ(*domain_var_sample)  # J(x, t)
         control_loss = self.first_order_criterion(J, u, domain_var_sample).mean() \
