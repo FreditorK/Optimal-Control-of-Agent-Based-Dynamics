@@ -145,8 +145,8 @@ class DGMPIASolver(Solver):
         self.g_φ_optimizer = OPTIMIZERS[self.optimiser](self.g_φ.parameters(), lr=model_config["learning_rate"])
 
         self.differential_criterion = lambda J, u, var: model_config["loss_weights"][0] * torch.square(
-            div(J, var[-1]) + L(J, u, var[:-1], var[-1]) + F(u, var[:-1], var[-1])).mean()
-        self.first_order_criterion = lambda J, u, var: -(L(J, u, var[:-1], var[-1]) + F(u, var[:-1], var[-1])).mean()
+            div(J, var[-1]) + L(J, u, var) + F(u, var)).mean()
+        self.first_order_criterion = lambda J, u, var: -(L(J, u, var) + F(u, var)).mean()
         self.boundary_criterion_J = lambda Js, vars: \
             model_config["loss_weights"][1] * sum(
                 [torch.square(bc(J, var)).mean() for J, var, bc in zip(Js, vars, hbj_config.boundary_cond_J)])

@@ -114,8 +114,40 @@ class GRUNetwork(nn.Module):
         return self.output_layer(S)
 
 
+class ResNetwork(nn.Module):
+
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(ResNetwork, self).__init__()
+        self.net = nn.Sequential(
+            ResLayer(input_dim, hidden_dim, 2*hidden_dim),
+            ResLayer(2*hidden_dim, 4*hidden_dim, 2*hidden_dim),
+            ResLayer(2*hidden_dim, hidden_dim, output_dim)
+        )
+
+    def forward(self, *vars):
+        xt = torch.cat(vars, dim=1)
+        return self.net(xt)
+
+
+class ResLayer(nn.Module):
+
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(ResLayer, self).__init__()
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ELU(),
+            nn.Linear(hidden_dim, output_dim)
+        )
+
+        self.shortcut = nn.Linear(input_dim, output_dim)
+
+    def forward(self, x):
+        return self.net(x) + self.shortcut(x)
+
+
 NETWORK_TYPES = {
     "BVP": BVPNetwork,
     "DGM": DGMNetwork,
-    "GRU": GRUNetwork
+    "GRU": GRUNetwork,
+    "Res": ResNetwork
 }
