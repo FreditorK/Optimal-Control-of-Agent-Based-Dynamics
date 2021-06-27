@@ -28,9 +28,6 @@ class UniformSampler:
                     f([torch.zeros(size=(batch_size, 1)).uniform_() for _ in range(self.var_dim)]))
         return [[f.to(self.device).requires_grad_() for f in fs] for fs in vars]
 
-    def update(self, loss):
-        pass
-
 
 class VariableUniformSampler:
 

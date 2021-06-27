@@ -18,7 +18,7 @@ class PDE:
         self.equation = None
         self.domain_func = []  # f(x)
         self.boundary_cond = []  # h(u, x, t)
-        self.boundary_func = []  # f(x)
+        self.boundary_func = []  # f(x), batch_size
 
 
 class HBJ:

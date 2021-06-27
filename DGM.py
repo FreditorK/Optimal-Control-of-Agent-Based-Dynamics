@@ -23,7 +23,6 @@ class Solver(ABC):
         else:
             self.device = torch.device("cpu")
 
-        self.batch_size = model_config["batch_size"]
         self.sampling_method = model_config["sampling_method"]
         self.network_type = model_config["network_type"]
         self.optimiser = model_config["optimiser"]
@@ -66,7 +65,6 @@ class DGMSolver(Solver):
         assert len(pde_config.boundary_cond) == len(pde_config.boundary_func), "Number of boundary " \
                                                                                "conditions does not match" \
                                                                                "number of sampling functions!"
-        self.boundary_batch_size = int(self.batch_size / len(pde_config.boundary_func))
         self.domain_sampler = SAMPLING_METHODS[self.sampling_method](pde_config.domain_func, pde_config.var_dim,
                                                                      device=self.device)
         self.boundary_sampler = SAMPLING_METHODS[self.sampling_method](pde_config.boundary_func, pde_config.var_dim,
@@ -78,11 +76,11 @@ class DGMSolver(Solver):
         self.f_θ_optimizer = OPTIMIZERS[self.optimiser](self.f_θ.parameters(), lr=model_config["learning_rate"])
 
         self.domain_criterion = lambda u, var: \
-            model_config["loss_weights"][0] * torch.square(pde_config.equation(u, var))
+            model_config["loss_weights"][0] * torch.square(pde_config.equation(u, var)).mean()
 
         self.boundary_criterion = lambda us, vars: \
             model_config["loss_weights"][1] * sum(
-                [torch.square(bc(u, var)) for u, var, bc in zip(us, vars, pde_config.boundary_cond)])
+                [torch.square(bc(u, var)).mean() for u, var, bc in zip(us, vars, pde_config.boundary_cond)])
 
         self.scheduler = ReduceLROnPlateau(self.f_θ_optimizer, 'min', factor=model_config["lr_decay"], min_lr=1e-10,
                                            patience=10)
@@ -111,14 +109,13 @@ class DGMSolver(Solver):
         boundary_loss = self.boundary_criterion(boundary_us, vars=boundary_vars_sample)
         domain_loss = self.domain_criterion(domain_u, var=domain_var_sample)
 
-        loss = domain_loss.mean() + boundary_loss.mean()
+        loss = domain_loss + boundary_loss
 
         self.f_θ_optimizer.zero_grad()
         loss.backward()
         self.f_θ_optimizer.step()
 
         self.scheduler.step(loss)
-        self.domain_sampler.update(loss.detach())
 
         return loss.cpu().detach().flatten()[0].numpy()
 
@@ -130,8 +127,6 @@ class DGMPIASolver(Solver):
         F = hbj_config.cost_function
         L = hbj_config.differential_operator
         self.control_vars = hbj_config.control_vars
-        self.boundary_J_batch_size = int(self.batch_size / len(hbj_config.boundary_func_J))
-        self.boundary_u_batch_size = int(self.batch_size / len(hbj_config.boundary_func_u))
         self.domain_sampler = SAMPLING_METHODS[self.sampling_method](hbj_config.domain_func, hbj_config.var_dim_J,
                                                                      device=self.device)
         self.boundary_sampler_J = SAMPLING_METHODS[self.sampling_method](hbj_config.boundary_func_J, hbj_config.var_dim_J,
@@ -150,14 +145,14 @@ class DGMPIASolver(Solver):
         self.g_φ_optimizer = OPTIMIZERS[self.optimiser](self.g_φ.parameters(), lr=model_config["learning_rate"])
 
         self.differential_criterion = lambda J, u, var: model_config["loss_weights"][0] * torch.square(
-            div(J, var[-1]) + L(J, u, var[:-1], var[-1]) + F(u, var[:-1], var[-1]))
-        self.first_order_criterion = lambda J, u, var: -(L(J, u, var[:-1], var[-1]) + F(u, var[:-1], var[-1]))
+            div(J, var[-1]) + L(J, u, var[:-1], var[-1]) + F(u, var[:-1], var[-1])).mean()
+        self.first_order_criterion = lambda J, u, var: -(L(J, u, var[:-1], var[-1]) + F(u, var[:-1], var[-1])).mean()
         self.boundary_criterion_J = lambda Js, vars: \
             model_config["loss_weights"][1] * sum(
-                [torch.square(bc(J, var)) for J, var, bc in zip(Js, vars, hbj_config.boundary_cond_J)])
+                [torch.square(bc(J, var)).mean() for J, var, bc in zip(Js, vars, hbj_config.boundary_cond_J)])
         self.boundary_criterion_u = lambda us, vars: \
             model_config["loss_weights"][1] * sum(
-                [torch.square(bc(u, var)) for u, var, bc in zip(us, vars, hbj_config.boundary_cond_u)])
+                [torch.square(bc(u, var)).mean() for u, var, bc in zip(us, vars, hbj_config.boundary_cond_u)])
 
         self.θ_scheduler = ReduceLROnPlateau(self.f_θ_optimizer, 'min', factor=model_config["lr_decay"], min_lr=1e-10,
                                              patience=10)
@@ -196,8 +191,8 @@ class DGMPIASolver(Solver):
         J = self.f_θ(*domain_var_sample)  # J(x, t)
         boundary_Js = [self.f_θ(*sample) for sample in boundary_vars_sample_J]  # e.g. terminal conditions
 
-        value_loss = self.differential_criterion(J, u, domain_var_sample).mean() \
-                     + self.boundary_criterion_J(boundary_Js, boundary_vars_sample_J).mean()
+        value_loss = self.differential_criterion(J, u, domain_var_sample) \
+                     + self.boundary_criterion_J(boundary_Js, boundary_vars_sample_J)
 
         self.f_θ_optimizer.zero_grad()
         value_loss.backward()
@@ -207,8 +202,8 @@ class DGMPIASolver(Solver):
         u = self.g_φ(*[domain_var_sample[i] for i in self.control_vars])  # u(t)
         boundary_us = [self.g_φ(*sample) for sample in boundary_vars_sample_u]  # e.g. control output restrictions
         J = self.f_θ(*domain_var_sample)  # J(x, t)
-        control_loss = self.first_order_criterion(J, u, domain_var_sample).mean() \
-                       + self.boundary_criterion_u(boundary_us, boundary_vars_sample_u).mean()
+        control_loss = self.first_order_criterion(J, u, domain_var_sample) \
+                       + self.boundary_criterion_u(boundary_us, boundary_vars_sample_u)
 
         self.g_φ_optimizer.zero_grad()
         control_loss.backward()
