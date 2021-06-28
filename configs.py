@@ -4,7 +4,7 @@ CONFIG_PARABOLIC_PDES = {
     "loss_weights": (2, 1),
     "lr_decay": 0.99,
     "sampling_method": "uniform",
-    "network_type": "Res",
+    "network_type": "DGM",
     "optimiser": "Adam"
 }
 
