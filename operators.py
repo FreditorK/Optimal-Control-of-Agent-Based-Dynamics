@@ -1,6 +1,7 @@
 from torch.autograd import grad
 import torch
 
+
 class Infix:
     def __init__(self, function):
         self.function = function
@@ -21,15 +22,35 @@ class Infix:
         return self.function(value1, value2)
 
 
-def m_func(x, y):
-    if isinstance(x, list):
-        x = torch.cat(x, dim=-1)
-        return torch.einsum("bi, ij -> bj", x, y)
-    y = torch.cat(y, dim=-1)
+def m_func_b(x, y):
+    """
+    Takes the right-side vector-matrix dot-product batch-wise
+    """
+    if isinstance(y, list):
+        y = torch.cat(y, dim=-1)
     return torch.einsum("ij, bj -> bi", x, y)
 
 
-def v_func(x, y):
+def b_func_m(x, y):
+    """
+    Takes the left-side vector-matrix dot-product batch-wise
+    """
+    if isinstance(x, list):
+        x = torch.cat(x, dim=-1)
+    return torch.einsum("bi, ij -> bj", x, y)
+
+
+def m_func_m(x, y):
+    """
+    Takes matrix dot-product
+    """
+    return x @ y
+
+
+def b_func_b(x, y):
+    """
+    Takes batch-wise dot-product
+    """
     if isinstance(x, list):
         x = torch.cat(x, dim=-1)
     if isinstance(y, list):
@@ -37,9 +58,10 @@ def v_func(x, y):
 
     return torch.einsum("bi, bi -> b", x, y).unsqueeze(1)
 
-
-mdot = Infix(m_func)
-vdot = Infix(v_func)
+mdotb = Infix(m_func_b)
+bdotm = Infix(b_func_m)
+mdotm = Infix(m_func_m)
+bdotb = Infix(b_func_b)
 
 
 def D(u, vars):

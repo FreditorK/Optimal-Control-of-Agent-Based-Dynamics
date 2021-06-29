@@ -94,7 +94,7 @@ class DGMSolver(Solver):
         with torch.no_grad():
             xs = [torch.FloatTensor([x]).to(self.device).unsqueeze(0) for x in args]
             u = self.f_θ(*xs)
-        return u.cpu().numpy().flatten()[0]
+        return u.cpu().numpy().flatten()
 
     def sample(self):
         domain_var_sample = self.domain_sampler.sample_var()[0]  # (func(vars), batch, 1)
@@ -170,13 +170,13 @@ class DGMPIASolver(Solver):
         with torch.no_grad():
             vars = [torch.FloatTensor([x]).to(self.device).unsqueeze(0) for x in args]
             J = self.f_θ(*vars)
-        return J.cpu().numpy().flatten()[0]
+        return J.cpu().numpy().flatten()
 
     def u(self, *args):
         with torch.no_grad():
             vars = [torch.FloatTensor([x]).to(self.device).unsqueeze(0) for x in args]
             u = self.g_φ(*vars)
-        return u.cpu().numpy().flatten()[0]
+        return u.cpu().numpy().flatten()
 
     def sample(self):
         domain_var_sample = self.domain_sampler.sample_var()[0]  # (func(vars), batch, 1)
