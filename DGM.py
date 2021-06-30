@@ -31,9 +31,9 @@ class Solver(ABC):
 
     def train(self, iterations):
         iterations = tqdm(range(iterations), leave=True, unit=" it")
-        for _ in iterations:
+        for i in iterations:
             args = self.sample()
-            loss = self.backprop_loss(*args)
+            loss = self.backprop_loss(i, *args)
             yield loss
 
     @abstractmethod
@@ -126,6 +126,7 @@ class DGMPIASolver(Solver):
         super(DGMPIASolver, self).__init__(model_config)
         F = hbj_config.cost_function
         L = hbj_config.differential_operator
+        self.delay_control = model_config["delay_control"]
         self.control_vars = hbj_config.control_vars
         self.domain_sampler = SAMPLING_METHODS[self.sampling_method](hbj_config.domain_func, hbj_config.var_dim_J,
                                                                      device=self.device)
@@ -133,10 +134,15 @@ class DGMPIASolver(Solver):
                                                                          device=self.device)
         self.boundary_sampler_u = SAMPLING_METHODS[self.sampling_method](hbj_config.boundary_func_u, len(self.control_vars),
                                                                          device=self.device)
+
+        #self.f_θ = lambda x, t: (0.316228*torch.exp(12.6491*t) - 99125.6)/(313463 + torch.exp(12.6491*t))*x**2
+
         self.f_θ = NETWORK_TYPES[self.network_type](input_dim=hbj_config.var_dim_J,
                                                     hidden_dim=model_config["hidden_dim"],
                                                     output_dim=1).to(self.device)  # value_function of (x, t)_J
 
+
+        #self.g_φ = lambda x, t: -(1 / hbj_config.D) * hbj_config.M * ((0.316228 * torch.exp(12.6491 * t) - 99125.6) / (313463 + torch.exp(12.6491 * t))) * x
         self.g_φ = NETWORK_TYPES[self.network_type](input_dim=len(self.control_vars),
                                                     hidden_dim=model_config["hidden_dim"],
                                                     output_dim=hbj_config.sol_dim).to(self.device)  # control_function of (x, t)_u
@@ -185,7 +191,7 @@ class DGMPIASolver(Solver):
 
         return domain_var_sample, boundary_vars_sample_J, boundary_vars_sample_u
 
-    def backprop_loss(self, domain_var_sample, boundary_vars_sample_J, boundary_vars_sample_u):
+    def backprop_loss(self, i, domain_var_sample, boundary_vars_sample_J, boundary_vars_sample_u):
         # value
         u = self.g_φ(*[domain_var_sample[i] for i in self.control_vars])  # u(t)
         J = self.f_θ(*domain_var_sample)  # J(x, t)
@@ -197,6 +203,7 @@ class DGMPIASolver(Solver):
         self.f_θ_optimizer.zero_grad()
         value_loss.backward()
         self.f_θ_optimizer.step()
+        self.θ_scheduler.step(value_loss)
 
         domain_var_sample = [var.detach().requires_grad_() for var in domain_var_sample]  # resets gradients to zero
 
@@ -207,11 +214,10 @@ class DGMPIASolver(Solver):
         control_loss = self.first_order_criterion(J, u, domain_var_sample) \
                        + self.boundary_criterion_u(boundary_us, boundary_vars_sample_u)
 
-        self.g_φ_optimizer.zero_grad()
-        control_loss.backward()
-        self.g_φ_optimizer.step()
-
-        self.θ_scheduler.step(value_loss)
-        self.φ_scheduler.step(control_loss)
+        if i % self.delay_control == 0:
+            self.g_φ_optimizer.zero_grad()
+            control_loss.backward()
+            self.g_φ_optimizer.step()
+            self.φ_scheduler.step(control_loss)
 
         return value_loss.cpu().detach().flatten()[0].numpy(), control_loss.cpu().detach().flatten()[0].numpy()

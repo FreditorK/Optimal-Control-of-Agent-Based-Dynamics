@@ -94,24 +94,49 @@ class GRUNetwork(nn.Module):
 
     def __init__(self, input_dim, hidden_dim, output_dim):
         super(GRUNetwork, self).__init__()
-        self.init_layer = nn.Sequential(
+
+        self.init_denominator = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            nn.ELU()
+            nn.ELU(),
         )
 
-        self.layer_1 = nn.GRUCell(input_dim, hidden_dim)
-        self.layer_2 = nn.GRUCell(input_dim, hidden_dim)
-        self.layer_3 = nn.GRUCell(input_dim, hidden_dim)
+        self.denominator_1 = nn.GRUCell(input_dim, hidden_dim)
+        self.denominator_2 = nn.GRUCell(input_dim, hidden_dim)
 
-        self.output_layer = nn.Linear(hidden_dim, output_dim)
+        self.init_numerator = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ELU(),
+        )
+
+        self.numerator_1 = nn.GRUCell(input_dim, hidden_dim)
+        self.numerator_2 = nn.GRUCell(input_dim, hidden_dim)
+        self.numerator_3 = nn.GRUCell(input_dim, hidden_dim)
+
+        self.numerator = nn.Linear(hidden_dim, output_dim)
+        self.denominator = nn.Linear(hidden_dim, output_dim)
+
+        self.interpolator = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ELU(),
+            nn.Linear(hidden_dim, 1),
+            nn.Sigmoid()
+        )
 
     def forward(self, *vars):
         xt = torch.cat(vars, dim=1)
-        S = self.init_layer(xt)
-        S = self.layer_1(xt, S)
-        S = self.layer_2(xt, S)
-        S = self.layer_3(xt, S)
-        return self.output_layer(S)
+        N = self.init_numerator(xt)
+        N = self.numerator_1(xt, N)
+        N = self.numerator_2(xt, N)
+        N = self.numerator_3(xt, N)
+        N_f = self.numerator(N)
+
+        D = self.init_denominator(xt)
+        D = self.denominator_1(xt, D)
+        D = self.denominator_2(xt, D)
+
+        I = self.interpolator(xt)
+
+        return I * N_f + (1-I) * torch.div(N_f, torch.exp(self.denominator(D)))
 
 
 class ResNetwork(nn.Module):
@@ -119,9 +144,9 @@ class ResNetwork(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super(ResNetwork, self).__init__()
         self.net = nn.Sequential(
-            ResLayer(input_dim, hidden_dim, 2*hidden_dim),
-            ResLayer(2*hidden_dim, 4*hidden_dim, 2*hidden_dim),
-            ResLayer(2*hidden_dim, hidden_dim, output_dim)
+            ResLayer(input_dim, hidden_dim, 2 * hidden_dim),
+            ResLayer(2 * hidden_dim, 4 * hidden_dim, 2 * hidden_dim),
+            ResLayer(2 * hidden_dim, hidden_dim, output_dim)
         )
 
     def forward(self, *vars):

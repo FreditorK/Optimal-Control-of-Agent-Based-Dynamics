@@ -15,5 +15,6 @@ CONFIG_HBJS = {
     "lr_decay": 0.99,
     "sampling_method": "uniform",
     "network_type": "GRU",
-    "optimiser": "Adam"
+    "optimiser": "Adam",
+    "delay_control": 2
 }
