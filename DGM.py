@@ -194,6 +194,7 @@ class DGMPIASolver(Solver):
     def backprop_loss(self, i, domain_var_sample, boundary_vars_sample_J, boundary_vars_sample_u):
         # value
         u = self.g_φ(*[domain_var_sample[i] for i in self.control_vars])  # u(t)
+        u += (torch.randn_like(u)).clamp(-0.5, 0.5)
         J = self.f_θ(*domain_var_sample)  # J(x, t)
         boundary_Js = [self.f_θ(*sample) for sample in boundary_vars_sample_J]  # e.g. terminal conditions
 
