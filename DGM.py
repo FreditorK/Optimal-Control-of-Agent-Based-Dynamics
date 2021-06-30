@@ -198,6 +198,8 @@ class DGMPIASolver(Solver):
         value_loss.backward()
         self.f_θ_optimizer.step()
 
+        domain_var_sample = [var.detach().requires_grad_() for var in domain_var_sample]  # resets gradients to zero
+
         # control
         u = self.g_φ(*[domain_var_sample[i] for i in self.control_vars])  # u(t)
         boundary_us = [self.g_φ(*sample) for sample in boundary_vars_sample_u]  # e.g. control output restrictions

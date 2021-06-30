@@ -22,11 +22,11 @@ class UniformSampler:
 
     def sample_var(self):
         with torch.no_grad():
-            vars = []
+            func_list = []
             for f, batch_size in self.funcs:
-                vars.append(
+                func_list.append(
                     f([torch.zeros(size=(batch_size, 1)).uniform_() for _ in range(self.var_dim)]))
-        return [[f.to(self.device).requires_grad_() for f in fs] for fs in vars]
+        return [[v.to(self.device).requires_grad_() for v in fs] for fs in func_list]
 
 
 class VariableUniformSampler:
