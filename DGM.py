@@ -102,7 +102,7 @@ class DGMSolver(Solver):
 
         return domain_var_sample, boundary_vars_sample
 
-    def backprop_loss(self, domain_var_sample, boundary_vars_sample):
+    def backprop_loss(self, _, domain_var_sample, boundary_vars_sample):
         domain_u = self.f_θ(*domain_var_sample)
         boundary_us = [self.f_θ(*sample) for sample in boundary_vars_sample]
 
