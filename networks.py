@@ -1,6 +1,5 @@
 import torch.nn as nn
 import torch
-from torchdyn.models import NeuralDE
 
 
 class DENSNetwork(nn.Module):
