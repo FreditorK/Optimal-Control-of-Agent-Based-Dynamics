@@ -3,38 +3,14 @@ import torch
 from torchdyn.models import NeuralDE
 
 
-class BVPNetwork(nn.Module):
+class DENSNetwork(nn.Module):
 
     def __init__(self, input_dim, hidden_dim, output_dim):
-        """
-        Tuple:param input_dim: (x_dim, t_dim)
-        int:param hidden_dim: number of hidden nodes
-        int:param output_dim: u_dim
-        """
         super().__init__()
-
-        self.spatial_net = nn.Sequential(
-            nn.Linear(input_dim - 1, hidden_dim),
-            nn.ELU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ELU(),
-            nn.Linear(hidden_dim, output_dim)
-        )
-
-        self.domain_net = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.ELU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ELU(),
-            nn.Linear(hidden_dim, output_dim)
-        )
-
-        self.final_layer = nn.Linear(output_dim * 2, output_dim)
+        self.net = GRUNetwork(input_dim, hidden_dim, output_dim)
 
     def forward(self, *vars):
-        domain = self.domain_net(torch.cat(vars, dim=1))
-        spatial = self.spatial_net(torch.cat(vars[:-1], dim=1))
-        return self.final_layer(torch.cat((domain, spatial), dim=1))
+        return torch.exp(self.net(*vars))
 
 
 class DGMNetwork(nn.Module):
@@ -139,10 +115,10 @@ class GRUNetwork(nn.Module):
         return I * N_f + (1-I) * torch.div(N_f, torch.exp(self.denominator(D)))
 
 
-class ResNetwork(nn.Module):
+class RESNetwork(nn.Module):
 
     def __init__(self, input_dim, hidden_dim, output_dim):
-        super(ResNetwork, self).__init__()
+        super(RESNetwork, self).__init__()
         self.net = nn.Sequential(
             ResLayer(input_dim, hidden_dim, 2 * hidden_dim),
             ResLayer(2 * hidden_dim, 4 * hidden_dim, 2 * hidden_dim),
@@ -171,8 +147,8 @@ class ResLayer(nn.Module):
 
 
 NETWORK_TYPES = {
-    "BVP": BVPNetwork,
     "DGM": DGMNetwork,
     "GRU": GRUNetwork,
-    "Res": ResNetwork
+    "DENS": DENSNetwork,
+    "RES": RESNetwork
 }

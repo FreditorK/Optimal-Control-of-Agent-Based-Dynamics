@@ -8,6 +8,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from optimisers import OPTIMIZERS
 import torch
 import os.path
+import numpy as np
 import torch.nn as nn
 
 
@@ -147,8 +148,11 @@ class DGMPIASolver(Solver):
                                                     hidden_dim=model_config["hidden_dim"],
                                                     output_dim=hbj_config.sol_dim).to(self.device)  # control_function of (x, t)_u
 
+        self.log_alpha = torch.tensor(np.log(model_config["alpha_noise"]), requires_grad=True)
+
         self.f_θ_optimizer = OPTIMIZERS[self.optimiser](self.f_θ.parameters(), lr=model_config["learning_rate"])
         self.g_φ_optimizer = OPTIMIZERS[self.optimiser](self.g_φ.parameters(), lr=model_config["learning_rate"])
+        self.alpha_optimizer = OPTIMIZERS[self.optimiser]([self.log_alpha], lr=model_config["learning_rate"])
 
         self.differential_criterion = lambda J, u, var: model_config["loss_weights"][0] * torch.square(
             div(J, var[-1]) + L(J, u, var) + F(u, var)).mean()
@@ -164,6 +168,8 @@ class DGMPIASolver(Solver):
                                              patience=10)
         self.φ_scheduler = ReduceLROnPlateau(self.g_φ_optimizer, 'min', factor=model_config["lr_decay"], min_lr=1e-10,
                                              patience=10)
+        self.alpha_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.alpha_optimizer, patience=10,
+                                                                          min_lr=1e-10)
 
         self.saveables = {
             "f_theta": self.f_θ,
@@ -171,6 +177,10 @@ class DGMPIASolver(Solver):
             "g_phi": self.g_φ,
             "g_phi_optimizer": self.g_φ_optimizer
         }
+
+    @property
+    def alpha(self):
+        return self.log_alpha.exp()
 
     def J(self, *args):
         with torch.no_grad():
@@ -194,7 +204,7 @@ class DGMPIASolver(Solver):
     def backprop_loss(self, i, domain_var_sample, boundary_vars_sample_J, boundary_vars_sample_u):
         # value
         u = self.g_φ(*[domain_var_sample[i] for i in self.control_vars])  # u(t)
-        u += (torch.randn_like(u)).clamp(-0.5, 0.5)
+        u += self.alpha*(torch.randn_like(u))
         J = self.f_θ(*domain_var_sample)  # J(x, t)
         boundary_Js = [self.f_θ(*sample) for sample in boundary_vars_sample_J]  # e.g. terminal conditions
 
@@ -212,13 +222,19 @@ class DGMPIASolver(Solver):
         u = self.g_φ(*[domain_var_sample[i] for i in self.control_vars])  # u(t)
         boundary_us = [self.g_φ(*sample) for sample in boundary_vars_sample_u]  # e.g. control output restrictions
         J = self.f_θ(*domain_var_sample)  # J(x, t)
-        control_loss = self.first_order_criterion(J, u, domain_var_sample) \
-                       + self.boundary_criterion_u(boundary_us, boundary_vars_sample_u)
+        control_loss = self.alpha*(self.first_order_criterion(J, u, domain_var_sample)
+                                   + self.boundary_criterion_u(boundary_us, boundary_vars_sample_u))
 
         if i % self.delay_control == 0:
             self.g_φ_optimizer.zero_grad()
             control_loss.backward()
             self.g_φ_optimizer.step()
             self.φ_scheduler.step(control_loss)
+
+            alpha_loss = -control_loss.detach()*self.alpha
+            self.alpha_optimizer.zero_grad()
+            alpha_loss.backward()
+            self.alpha_optimizer.step()
+            self.alpha_scheduler.step(alpha_loss)
 
         return value_loss.cpu().detach().flatten()[0].numpy(), control_loss.cpu().detach().flatten()[0].numpy()

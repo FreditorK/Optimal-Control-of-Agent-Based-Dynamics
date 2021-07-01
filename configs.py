@@ -16,5 +16,6 @@ CONFIG_HBJS = {
     "sampling_method": "uniform",
     "network_type": "GRU",
     "optimiser": "Adam",
-    "delay_control": 1
+    "delay_control": 1,
+    "alpha_noise": 0.1
 }
