@@ -1,7 +1,6 @@
 from sampling import SAMPLING_METHODS
 from networks import NETWORK_TYPES
-from operators import div, grad, Δ
-from torch.optim import Adam
+from operators import div
 from tqdm import tqdm
 from abc import ABC, abstractmethod
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -9,7 +8,6 @@ from optimisers import OPTIMIZERS
 import torch
 import os.path
 import numpy as np
-import torch.nn as nn
 
 
 class Solver(ABC):
