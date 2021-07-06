@@ -1,4 +1,3 @@
-
 class PDE:
     """
     var_dim: Dimension of the collective variable vector
@@ -30,13 +29,25 @@ class HBJ:
     """
 
     def __init__(self):
-        self.sol_dim = 1
+        self.sol_dim = 1  # dimension of control output
         self.var_dim_J = None
-        self.control_vars = []
+        self.cost_function = None  # F(u, x, t)
+        self.differential_operator = None  # L(J, u, x, t)
+        self.control_vars = []  # indices of variable dependencies of the control function
         self.domain_func = []  # f(x)
         self.boundary_cond_J = []  # h(J, x, t)
         self.boundary_func_J = []  # f(x)
         self.boundary_cond_u = []  # h(u, x, t)
         self.boundary_func_u = []  # f(x)
-        self.cost_function = None  # F(u, x, t)
-        self.differential_operator = None  # L(J, u, x, t)
+
+
+class FBSDE:
+    def __init__(self):
+        self.var_dim = None  # dimension of X
+        self.terminal_time = None  # terminal time
+        self.H = None  # H(X, t)
+        self.sigma = None  # σ(X, t)
+        self.C = None  # C(X)
+        self.terminal_condition = None  # R(X)
+        self.D = None  # Matrix, dimension of control output
+        self.Gamma = None  # Γ(X, t)
