@@ -4,6 +4,7 @@ from optimisers import OPTIMIZERS
 from operators import D
 from tqdm import tqdm
 from networks import NETWORK_TYPES
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 
 class FBSDESolver:
@@ -18,6 +19,7 @@ class FBSDESolver:
         self.num_discretisation_steps = model_config["num_discretisation_steps"]
         self.dt = (fbsde_config.terminal_time / model_config["num_discretisation_steps"])*torch.ones((self.batch_size, 1))
         self.var_dim = fbsde_config.var_dim
+        self.init_sampling_func = fbsde_config.init_sampling_func
 
         self.H = fbsde_config.H
         self.sigma = fbsde_config.sigma
@@ -37,15 +39,21 @@ class FBSDESolver:
             nn.Linear(model_config["hidden_dim"], 1)
         )
         self.optimizer = OPTIMIZERS[model_config["optimiser"]](self.Z_net.parameters(), lr=model_config["learning_rate"])
+        self.scheduler = ReduceLROnPlateau(self.optimizer, 'min', factor=model_config["lr_decay"], min_lr=1e-10, patience=10)
 
     def J(self, *args):
         pass
 
     def u(self, *args):
-        pass
+        with torch.no_grad():
+            vars = [torch.FloatTensor([x]).to(self.device).unsqueeze(0) for x in args]
+            Gamma = self.Gamma(*vars)[0]
+            Z = self.Z_net(*vars)
+            U = torch.einsum("ij, bj -> i", (-self.inv_D @ Gamma), Z)
+        return U.cpu().numpy().flatten()
 
     def train(self, iterations):
-        X = torch.rand(self.batch_size, self.var_dim).requires_grad_()
+        X = self.init_sampling_func(torch.rand(self.batch_size, self.var_dim)).detach().requires_grad_()
         iterations = tqdm(range(iterations), leave=True, unit=" it")
         for _ in iterations:
             Y = self.init_Y(X)
@@ -56,6 +64,7 @@ class FBSDESolver:
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
+            self.scheduler.step(loss)
             yield loss.detach().cpu().item()
 
     def train_for_iteration(self, X, Y, Z):
