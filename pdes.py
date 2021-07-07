@@ -50,5 +50,5 @@ class FBSDE:
         self.C = None  # C(X)
         self.terminal_condition = None  # R(X)
         self.D = None  # Matrix, dimension of control output
-        self.Gamma = None  # Γ(X, t)
+        self.M = None  # M(X, t)
         self.init_sampling_func = None  # f(x): [0, 1]->desired initial domain

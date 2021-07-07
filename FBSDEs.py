@@ -25,7 +25,7 @@ class FBSDESolver:
         self.sigma = fbsde_config.sigma
 
         self.C = fbsde_config.C
-        self.Gamma = fbsde_config.Gamma
+        self.M = fbsde_config.M
         self.terminal_condition = fbsde_config.terminal_condition
         self.inv_D = torch.inverse(fbsde_config.D)
 
@@ -47,9 +47,9 @@ class FBSDESolver:
     def u(self, *args):
         with torch.no_grad():
             vars = [torch.FloatTensor([x]).to(self.device).unsqueeze(0) for x in args]
-            Gamma = self.Gamma(*vars)[0]
+            M = self.M(*vars)[0]
             Z = self.Z_net(*vars)
-            U = torch.einsum("ij, bj -> i", (-self.inv_D @ Gamma), Z)
+            U = torch.einsum("ij, bj -> i", (-self.inv_D @ M.T), Z)
         return U.cpu().numpy().flatten()
 
     def train(self, iterations):
@@ -57,7 +57,7 @@ class FBSDESolver:
         iterations = tqdm(range(iterations), leave=True, unit=" it")
         for _ in iterations:
             Y = self.init_Y(X)
-            Z = torch.einsum("bij, bj -> bi", self.sigma(X, 0), D(Y, X))
+            Z = D(Y, X)
             Y_pred, X_terminal = self.train_for_iteration(X, Y, Z)
             Y_true = self.terminal_condition(X_terminal)
             loss = self.criterion(Y_pred, Y_true)
@@ -68,20 +68,19 @@ class FBSDESolver:
             yield loss.detach().cpu().item()
 
     def train_for_iteration(self, X, Y, Z):
-        sigma = self.sigma(X, 0)
-        dW = torch.einsum("bij, bj -> bi", sigma, torch.randn(self.batch_size, self.var_dim))
+        dW = torch.randn(self.batch_size, self.var_dim)
         for i in range(self.num_discretisation_steps):
-            Gamma = self.Gamma(X, self.dt * i)
+            M = self.M(X, self.dt * i)
             sigma = self.sigma(X, self.dt * i)
             # if bool
-            U = torch.einsum("bij, bj -> bi", (-self.inv_D @ Gamma), Z)
-            dW = torch.einsum("bij, bj -> bi", sigma, torch.randn(self.batch_size, self.var_dim)) - dW
+            U = torch.einsum("bij, bj -> bi", (-self.inv_D @ M), Z)
+            dW = torch.randn(self.batch_size, self.var_dim) - dW
             Y = Y - self.C(X)*self.dt \
-                + (1/2)*torch.einsum("bi, bij, bj -> b", Z, Gamma, U).unsqueeze(1)*self.dt \
-                + torch.einsum("bi, bi -> b", Z, dW).unsqueeze(1)
+                + (1/2)*torch.einsum("bi, bij, bj -> b", Z, M, U).unsqueeze(1)*self.dt \
+                + torch.einsum("bi, bi -> b", Z, torch.einsum("bij, bj -> bi", sigma, dW)).unsqueeze(1)
 
-            X = X + self.H(X, self.dt*i)*self.dt + torch.einsum("bij, bj -> bi", sigma, (torch.einsum("bij, bj -> bi", Gamma, U)*self.dt + dW))
+            X = X + self.H(X, self.dt*i)*self.dt + torch.einsum("bij, bj -> bi", M, U)*self.dt + torch.einsum("bij, bj -> bi", sigma, dW)
 
-            Z = self.Z_net(X, self.dt*i)
+            Z = self.Z_net(Y, self.dt*i)
 
         return Y, X
