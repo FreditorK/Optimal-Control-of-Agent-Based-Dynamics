@@ -1,5 +1,6 @@
 import torch.nn as nn
 import torch
+from operators import D
 
 
 class DENSNetwork(nn.Module):
@@ -118,15 +119,16 @@ class RESNetwork(nn.Module):
 
     def __init__(self, input_dim, hidden_dim, output_dim):
         super(RESNetwork, self).__init__()
-        self.net = nn.Sequential(
-            ResLayer(input_dim, hidden_dim, 2 * hidden_dim),
-            ResLayer(2 * hidden_dim, 4 * hidden_dim, 2 * hidden_dim),
-            ResLayer(2 * hidden_dim, hidden_dim, output_dim)
+        self.y_net = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ELU(),
+            nn.Linear(hidden_dim, output_dim)
         )
 
     def forward(self, *vars):
         xt = torch.cat(vars, dim=1)
-        return self.net(xt)
+        y = self.y_net(xt)
+        return y, D(y, vars[:-1])
 
 
 class ResLayer(nn.Module):
