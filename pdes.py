@@ -52,3 +52,4 @@ class FBSDE:
         self.D = None  # Matrix, dimension of control output
         self.M = None  # M(X, t)
         self.init_sampling_func = None  # f(x): [0, 1]->desired initial domain
+        self.control_noise = 0

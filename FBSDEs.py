@@ -20,6 +20,7 @@ class FBSDESolver:
         self.dt = (fbsde_config.terminal_time / model_config["num_discretisation_steps"])*torch.ones((self.batch_size, 1))
         self.var_dim = fbsde_config.var_dim
         self.init_sampling_func = fbsde_config.init_sampling_func
+        self.control_noise = fbsde_config.control_noise
 
         self.H = fbsde_config.H
         self.sigma = fbsde_config.sigma
@@ -42,7 +43,9 @@ class FBSDESolver:
         self.scheduler = ReduceLROnPlateau(self.optimizer, 'min', factor=model_config["lr_decay"], min_lr=1e-10, patience=10)
 
     def J(self, *args):
-        pass
+        vars = [torch.FloatTensor([x]).to(self.device).unsqueeze(0).requires_grad_() for x in args]
+        Y_pred, _ = self.Z_net(*vars)
+        return Y_pred
 
     def u(self, *args):
         vars = [torch.FloatTensor([x]).to(self.device).unsqueeze(0).requires_grad_() for x in args]
@@ -72,15 +75,15 @@ class FBSDESolver:
             M = self.M(X, t)
             sigma = self.sigma(X, t)
             # if bool
-            U = torch.zeros(self.batch_size, self.var_dim).uniform_(-0.0, 0.0).detach() #torch.einsum("bij, bj -> bi", (-self.inv_D @ M), Z)
+            K = torch.zeros(self.batch_size, self.var_dim).uniform_(-self.control_noise, self.control_noise).detach() #torch.einsum("bij, bj -> bi", (-self.inv_D @ M), Z)
             DMZ = torch.einsum("bij, bj -> bi", (-self.inv_D @ M), Z)
             dW = sqrt_dt*torch.randn(self.batch_size, self.var_dim)
             X = X + self.H(X, t) * self.dt + torch.einsum("bij, bj -> bi", sigma, dW) \
-                + torch.einsum("bij, bj -> bi", sigma, U) * self.dt
+                + torch.einsum("bij, bj -> bi", sigma, K) * self.dt
             Y = Y - self.C(X)*self.dt \
                 - (1/2)*torch.einsum("bi, bij, bj -> b", Z, M, DMZ).unsqueeze(1)*self.dt \
                 + torch.einsum("bi, bi -> b", Z, torch.einsum("bij, bj -> bi", sigma, dW)).unsqueeze(1) \
-                + torch.einsum("bi, bij, bj -> b", Z, sigma, U).unsqueeze(1)*self.dt
+                + torch.einsum("bi, bij, bj -> b", Z, sigma, K).unsqueeze(1)*self.dt
 
             Y_pred, Z = self.Z_net(X.detach().requires_grad_(), t)
             loss += self.criterion(Y_pred, Y)
