@@ -1,6 +1,5 @@
 import torch.nn as nn
 import torch
-from operators import D
 
 
 class DENSNetwork(nn.Module):
@@ -112,23 +111,22 @@ class GRUNetwork(nn.Module):
 
         I = self.interpolator(xt)
 
-        return I * N_f + (1-I) * torch.div(N_f, torch.exp(self.denominator(D)))
+        return I * N_f + (1 - I) * torch.div(N_f, torch.exp(self.denominator(D)))
 
 
 class RESNetwork(nn.Module):
 
     def __init__(self, input_dim, hidden_dim, output_dim):
         super(RESNetwork, self).__init__()
-        self.y_net = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.ELU(),
-            nn.Linear(hidden_dim, output_dim)
+        self.net = nn.Sequential(
+            ResLayer(input_dim, hidden_dim, 2 * hidden_dim),
+            ResLayer(2 * hidden_dim, 4 * hidden_dim, 2 * hidden_dim),
+            ResLayer(2 * hidden_dim, hidden_dim, output_dim)
         )
 
     def forward(self, *vars):
         xt = torch.cat(vars, dim=1)
-        y = self.y_net(xt)
-        return y, D(y, vars[:-1])
+        return self.net(xt)
 
 
 class ResLayer(nn.Module):
@@ -147,9 +145,26 @@ class ResLayer(nn.Module):
         return self.net(x) + self.shortcut(x)
 
 
+class MININetwork(nn.Module):
+
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(MININetwork, self).__init__()
+        self.y_net = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ELU(),
+            nn.Linear(hidden_dim, output_dim)
+        )
+
+    def forward(self, *vars):
+        xt = torch.cat(vars, dim=1)
+        y = self.y_net(xt)
+        return y
+
+
 NETWORK_TYPES = {
     "DGM": DGMNetwork,
     "GRU": GRUNetwork,
     "DENS": DENSNetwork,
-    "RES": RESNetwork
+    "RES": RESNetwork,
+    "MINI": MININetwork
 }

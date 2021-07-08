@@ -34,23 +34,20 @@ class FBSDESolver:
         self.Z_net = NETWORK_TYPES[model_config["network_type"]](input_dim=fbsde_config.var_dim+1,
                                                                 hidden_dim=model_config["hidden_dim"],
                                                                 output_dim=fbsde_config.var_dim).to(self.device)
-        self.init_Y = nn.Sequential(
-            nn.Linear(fbsde_config.var_dim, model_config["hidden_dim"]),
-            nn.ELU(),
-            nn.Linear(model_config["hidden_dim"], 1)
-        )
+
         self.optimizer = OPTIMIZERS[model_config["optimiser"]](self.Z_net.parameters(), lr=model_config["learning_rate"])
         self.scheduler = ReduceLROnPlateau(self.optimizer, 'min', factor=model_config["lr_decay"], min_lr=1e-10, patience=10)
 
     def J(self, *args):
         vars = [torch.FloatTensor([x]).to(self.device).unsqueeze(0).requires_grad_() for x in args]
-        Y_pred, _ = self.Z_net(*vars)
+        Y_pred = self.Z_net(*vars)
         return Y_pred
 
     def u(self, *args):
         vars = [torch.FloatTensor([x]).to(self.device).unsqueeze(0).requires_grad_() for x in args]
         M = self.M(*vars)[0]
-        _, Z = self.Z_net(*vars)
+        Y = self.Z_net(*vars)
+        Z = D(Y, vars[:-1])
         U = torch.einsum("ij, bj -> i", (-self.inv_D @ M.T), Z)
         return U.detach().cpu().numpy().flatten()
 
@@ -58,19 +55,20 @@ class FBSDESolver:
         X = self.init_sampling_func(torch.rand(self.batch_size, self.var_dim)).detach().requires_grad_()
         iterations = tqdm(range(iterations), leave=True, unit=" it")
         for _ in iterations:
-            Y = self.init_Y(X)
-            Z = D(Y, X)
-            loss = self.train_for_iteration(X, Y, Z)
+            loss = self.train_for_iteration(X)
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
             self.scheduler.step(loss)
             yield loss.detach().cpu().item()
 
-    def train_for_iteration(self, X, Y, Z):
+    def train_for_iteration(self, X):
         loss = 0
         sqrt_dt = torch.sqrt(self.dt)
-        for i in range(self.num_discretisation_steps):
+        t = Variable(self.dt * 0)
+        Y = self.Z_net(X, t)
+        Z = D(Y, X)
+        for i in range(1, self.num_discretisation_steps):
             t = Variable(self.dt*i)
             M = self.M(X, t)
             sigma = self.sigma(X, t)
@@ -85,7 +83,9 @@ class FBSDESolver:
                 + torch.einsum("bi, bi -> b", Z, torch.einsum("bij, bj -> bi", sigma, dW)).unsqueeze(1) \
                 + torch.einsum("bi, bij, bj -> b", Z, sigma, K).unsqueeze(1)*self.dt
 
-            Y_pred, Z = self.Z_net(X.detach().requires_grad_(), t)
+            X_pred = X.detach().requires_grad_()
+            Y_pred = self.Z_net(X_pred, t)
+            Z = D(Y_pred, X_pred)
             loss += self.criterion(Y_pred, Y)
 
         Y_terminal = self.terminal_condition(X)
