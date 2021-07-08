@@ -72,13 +72,15 @@ class FBSDESolver:
             M = self.M(X, t)
             sigma = self.sigma(X, t)
             # if bool
-            U = torch.einsum("bij, bj -> bi", (-self.inv_D @ M), Z)
+            U = torch.zeros(self.batch_size, self.var_dim).uniform_(-0.0, 0.0).detach() #torch.einsum("bij, bj -> bi", (-self.inv_D @ M), Z)
+            DMZ = torch.einsum("bij, bj -> bi", (-self.inv_D @ M), Z)
             dW = sqrt_dt*torch.randn(self.batch_size, self.var_dim)
             X = X + self.H(X, t) * self.dt + torch.einsum("bij, bj -> bi", M, U) * self.dt + torch.einsum(
                 "bij, bj -> bi", sigma, dW)
             Y = Y - self.C(X)*self.dt \
-                + (1/2)*torch.einsum("bi, bij, bj -> b", Z, M, U).unsqueeze(1)*self.dt \
-                + torch.einsum("bi, bi -> b", Z, torch.einsum("bij, bj -> bi", sigma, dW)).unsqueeze(1)
+                - (1/2)*torch.einsum("bi, bij, bj -> b", Z, M, DMZ).unsqueeze(1)*self.dt \
+                + torch.einsum("bi, bi -> b", Z, torch.einsum("bij, bj -> bi", sigma, dW)).unsqueeze(1) \
+                + torch.einsum("bi, bi -> b", Z, U).unsqueeze(1)
 
             Y_pred, Z = self.Z_net(X.detach().requires_grad_(), t)
             loss += self.criterion(Y_pred, Y)
