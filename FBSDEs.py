@@ -5,7 +5,7 @@ from operators import D
 from tqdm import tqdm
 from networks import NETWORK_TYPES
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-
+from torch.autograd import Variable
 
 class FBSDESolver:
 
@@ -68,19 +68,20 @@ class FBSDESolver:
             yield loss.detach().cpu().item()
 
     def train_for_iteration(self, X, Y, Z):
-        dW = torch.randn(self.batch_size, self.var_dim)
+        sqrt_dt = torch.sqrt(self.dt)
         for i in range(self.num_discretisation_steps):
-            M = self.M(X, self.dt * i)
-            sigma = self.sigma(X, self.dt * i)
+            t = Variable(self.dt*i)
+            M = self.M(X, t)
+            sigma = self.sigma(X, t)
             # if bool
             U = torch.einsum("bij, bj -> bi", (-self.inv_D @ M), Z)
-            dW = torch.randn(self.batch_size, self.var_dim) - dW
+            dW = torch.einsum("bij, bj -> bi", sigma, torch.randn(self.batch_size, self.var_dim))
             Y = Y - self.C(X)*self.dt \
                 + (1/2)*torch.einsum("bi, bij, bj -> b", Z, M, U).unsqueeze(1)*self.dt \
                 + torch.einsum("bi, bi -> b", Z, torch.einsum("bij, bj -> bi", sigma, dW)).unsqueeze(1)
 
-            X = X + self.H(X, self.dt*i)*self.dt + torch.einsum("bij, bj -> bi", M, U)*self.dt + torch.einsum("bij, bj -> bi", sigma, dW)
+            X = X + self.H(X, t)*self.dt + torch.einsum("bij, bj -> bi", M, U)*self.dt + torch.einsum("bij, bj -> bi", sigma, dW)
 
-            Z = self.Z_net(Y, self.dt*i)
+            Z = self.Z_net(Y, t)
 
         return Y, X
