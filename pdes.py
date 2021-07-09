@@ -45,11 +45,9 @@ class FBSDE:
     def __init__(self):
         self.var_dim = None  # dimension of X
         self.terminal_time = None  # terminal time
-        self.H = None  # H(X, t)
+        self.b = None  # b(X, t)
         self.sigma = None  # σ(X, t)
-        self.C = None  # C(X)
         self.terminal_condition = None  # R(X)
-        self.D = None  # Matrix, dimension of control output
-        self.M = None  # M(X, t)
+        self.h = None  # h(X, Y, Z, t)
         self.init_sampling_func = None  # f(x): [0, 1]->desired initial domain
         self.control_noise = 0
