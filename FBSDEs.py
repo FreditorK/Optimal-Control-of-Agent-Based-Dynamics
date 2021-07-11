@@ -52,7 +52,7 @@ class FBSDESolver:
             Y_preds = np.zeros((self.num_discretisation_steps, num_samples, 1))
             ts = np.zeros((self.num_discretisation_steps, num_samples, 1))
             dt = self.dt[:num_samples]
-            X = self.init_sampling_func(torch.rand(num_samples, self.var_dim)).detach().requires_grad_()
+            X = self.init_sampling_func(torch.rand(1, self.var_dim).repeat(num_samples, 1))
             sqrt_dt = torch.sqrt(dt)
             t = Variable(dt * 0)
             Y = self.Y_net(X, t)
@@ -62,12 +62,8 @@ class FBSDESolver:
             for i in range(1, self.num_discretisation_steps):
                 t = Variable(dt * i)
                 sigma = self.sigma(X, t)
-                # if bool
-                K = torch.zeros(num_samples, self.var_dim).uniform_(-self.control_noise,
-                                                                    self.control_noise).detach()  # torch.einsum("bij, bj -> bi", (-self.inv_D @ M), Z)
                 dW = sqrt_dt * torch.randn(num_samples, self.var_dim)
-                X = X + self.b(X, t) * dt + torch.einsum("bij, bj -> bi", sigma, dW) \
-                    + torch.einsum("bij, bj -> bi", sigma, K) * dt
+                X = X + self.b(X, t) * dt + torch.einsum("bij, bj -> bi", sigma, dW)
                 Y = self.Y_net(X, t)
                 X_preds[i] = X.detach().cpu().numpy()
                 Y_preds[i] = Y.detach().cpu().numpy()
@@ -95,7 +91,6 @@ class FBSDESolver:
         for i in range(1, self.num_discretisation_steps):
             t = Variable(self.dt * i)
             sigma = self.sigma(X, t)
-            # if bool
             K = torch.zeros(self.batch_size, self.var_dim).uniform_(-self.control_noise,
                                                                     self.control_noise).detach()  # torch.einsum("bij, bj -> bi", (-self.inv_D @ M), Z)
             dW = sqrt_dt * torch.randn(self.batch_size, self.var_dim)

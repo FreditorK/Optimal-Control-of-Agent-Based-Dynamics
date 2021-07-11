@@ -54,11 +54,11 @@ class Solver(ABC):
             v.load_state_dict(checkpoint[k].state_dict())
 
 
-class DGMSolver(Solver):
+class DeepPDESolver(Solver):
 
     def __init__(self, model_config, pde_config):
         """
-        Deep Galerkin PDE Solver
+        Deep Galerkin/Ritz PDE Solver
         """
         super().__init__(model_config)
         assert len(pde_config.boundary_cond) == len(pde_config.boundary_func), "Number of boundary " \
@@ -74,8 +74,12 @@ class DGMSolver(Solver):
 
         self.f_θ_optimizer = OPTIMIZERS[self.optimiser](self.f_θ.parameters(), lr=model_config["learning_rate"])
 
-        self.domain_criterion = lambda u, var: \
-            model_config["loss_weights"][0] * torch.square(pde_config.equation(u, var)).mean()
+        if model_config["method"] == "Ritz":
+            self.domain_criterion = lambda u, var: \
+                model_config["loss_weights"][0] * (pde_config.equation(u, var)).mean()
+        else:
+            self.domain_criterion = lambda u, var: \
+                model_config["loss_weights"][0] * torch.square(pde_config.equation(u, var)).mean()
 
         self.boundary_criterion = lambda us, vars: \
             model_config["loss_weights"][1] * sum(

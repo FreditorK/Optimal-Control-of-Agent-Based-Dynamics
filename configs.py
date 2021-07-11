@@ -5,7 +5,8 @@ CONFIG_PARABOLIC_PDES = {
     "lr_decay": 0.99,
     "sampling_method": "uniform",
     "network_type": "DGM",
-    "optimiser": "Adam"
+    "optimiser": "Adam",
+    "method": "Galerkin"
 }
 
 CONFIG_HBJS = {

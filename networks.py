@@ -1,5 +1,6 @@
 import torch.nn as nn
 import torch
+from itertools import product
 
 
 class DENSNetwork(nn.Module):
@@ -161,10 +162,58 @@ class MININetwork(nn.Module):
         return y
 
 
+class FeedForwardNetwork(nn.Module):
+
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(FeedForwardNetwork, self).__init__()
+        self.y_net = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.SiLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SiLU(),
+            nn.Linear(hidden_dim, output_dim),
+        )
+
+    def forward(self, *vars):
+        xt = torch.cat(vars, dim=1)
+        weights = self.y_net(xt)
+        return weights
+
+
 NETWORK_TYPES = {
     "DGM": DGMNetwork,
     "GRU": GRUNetwork,
     "DENS": DENSNetwork,
     "RES": RESNetwork,
-    "MINI": MININetwork
+    "MINI": MININetwork,
+    "FF": FeedForwardNetwork
 }
+
+"""
+class FeedForwardNetwork(nn.Module):
+
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(FeedForwardNetwork, self).__init__()
+        self.y_net = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 36),
+        )
+
+        self.zero_net = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 36),
+            nn.Sigmoid()
+        )
+
+    def forward(self, *vars):
+        xt = torch.cat(vars, dim=1)
+        weights = self.y_net(xt)
+        zeroed = torch.round(self.zero_net(xt))
+        return torch.sum(zeroed*weights*torch.cat([vars[0]**i * vars[1]**j for i, j in product(range(6), range(6))], dim=1), dim=-1)
+"""
