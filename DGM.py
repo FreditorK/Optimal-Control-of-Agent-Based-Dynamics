@@ -150,7 +150,7 @@ class DGMPIASolver(Solver):
                                                     hidden_dim=model_config["hidden_dim"],
                                                     output_dim=hbj_config.sol_dim).to(self.device)  # control_function of (x, t)_u
 
-        self.log_alpha = torch.tensor(np.log(model_config["alpha_noise"]), requires_grad=True)
+        self.alpha = torch.tensor(model_config["alpha_noise"], requires_grad=False)
 
         self.f_θ_optimizer = OPTIMIZERS[self.optimiser](self.f_θ.parameters(), lr=model_config["learning_rate"])
         self.g_φ_optimizer = OPTIMIZERS[self.optimiser](self.g_φ.parameters(), lr=model_config["learning_rate"])
@@ -179,10 +179,6 @@ class DGMPIASolver(Solver):
             "g_phi": self.g_φ,
             "g_phi_optimizer": self.g_φ_optimizer
         }
-
-    @property
-    def alpha(self):
-        return self.log_alpha.exp()
 
     def J(self, *args):
         with torch.no_grad():
@@ -232,6 +228,8 @@ class DGMPIASolver(Solver):
             control_loss.backward()
             self.g_φ_optimizer.step()
             self.φ_scheduler.step(control_loss)
+
+            self.alpha *= 0.99
 
             '''alpha_loss = -control_loss.detach()*self.alpha
             self.alpha_optimizer.zero_grad()

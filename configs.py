@@ -18,7 +18,7 @@ CONFIG_HBJS = {
     "network_type": "GRU",
     "optimiser": "Adam",
     "delay_control": 1,
-    "alpha_noise": 1e-10
+    "alpha_noise": 1e-1
 }
 
 CONFIG_FBSDES = {

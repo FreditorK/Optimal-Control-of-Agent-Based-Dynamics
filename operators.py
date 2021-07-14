@@ -58,6 +58,7 @@ def b_func_b(x, y):
 
     return torch.einsum("bi, bi -> b", x, y).unsqueeze(1)
 
+
 mdotb = Infix(m_func_b)
 bdotm = Infix(b_func_m)
 mdotm = Infix(m_func_m)
@@ -91,3 +92,13 @@ def Δ(u, vars):
     u_hess_diag = sum(grad(u_grad_sum, vars, create_graph=True, grad_outputs=torch.ones_like(u_grad_sum)))
     u_lap = torch.sum(u_hess_diag, dim=-1).unsqueeze(1)
     return u_lap
+
+
+def H(u, vars):
+    hessian_rows = []
+    u_grads = list(grad(outputs=u, inputs=vars, create_graph=True, grad_outputs=torch.ones_like(u)))
+    for u_grad in u_grads:
+        hessian_rows.append(
+            torch.cat(grad(u_grad, vars, create_graph=True, grad_outputs=torch.ones_like(u_grad)), dim=-1).unsqueeze(
+                -1))
+    return torch.cat(hessian_rows, dim=-1)

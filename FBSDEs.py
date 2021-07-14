@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from optimisers import OPTIMIZERS
-from operators import D
+from operators import D, H
 from tqdm import tqdm
 from networks import NETWORK_TYPES
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -110,3 +110,43 @@ class FBSDESolver:
             loss += self.criterion(Y_pred, Y_terminal)
 
         return loss
+
+
+class F2BSDESolver(FBSDESolver):
+
+    def __init__(self, model_config, fbsde_config):
+        super(F2BSDESolver, self).__init__(model_config, fbsde_config)
+
+    def dynkin(self, sigma, ):
+        pass
+
+    def train_for_iteration(self, X):
+        loss = 0
+        sqrt_dt = torch.sqrt(self.dt)
+        t = Variable(self.dt * 0)
+        Y = self.Y_net(X, t)
+        Z = D(Y, X)
+        Gamma = H(Y, X)
+        for i in range(1, self.num_discretisation_steps):
+            t = Variable(self.dt * i)
+            sigma = self.sigma(X, t)
+            K = torch.zeros(self.batch_size, self.var_dim).uniform_(-self.control_noise,
+                                                                    self.control_noise).detach()  # torch.einsum("bij, bj -> bi", (-self.inv_D @ M), Z)
+            dW = sqrt_dt * torch.randn(self.batch_size, self.var_dim)
+            X = X + self.b(X, t) * self.dt + torch.einsum("bij, bj -> bi", sigma, dW) \
+                + torch.einsum("bij, bj -> bi", sigma, K) * self.dt
+            Y = Y - self.h(X, Y, Z, t) * self.dt \
+                + torch.einsum("bi, bi -> b", Z, torch.einsum("bij, bj -> bi", sigma, dW)).unsqueeze(1) \
+                + torch.einsum("bi, bij, bj -> b", Z, sigma, K).unsqueeze(1) * self.dt
+
+            X_pred = X.detach().requires_grad_()
+            Y_pred = self.Y_net(X_pred, t)
+            Z = D(Y_pred, X_pred)
+            loss += self.criterion(Y_pred, Y)
+
+        if self.terminal_condition is not None:
+            Y_terminal = self.terminal_condition(X)
+            loss += self.criterion(Y_pred, Y_terminal)
+
+        return loss
+

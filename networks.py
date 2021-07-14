@@ -1,6 +1,7 @@
 import torch.nn as nn
 import torch
 from itertools import product
+from torchdyn.models import NeuralDE
 
 
 class DENSNetwork(nn.Module):
@@ -178,6 +179,37 @@ class FeedForwardNetwork(nn.Module):
         xt = torch.cat(vars, dim=1)
         weights = self.y_net(xt)
         return weights
+
+
+class ODELSTMCell(nn.Module):
+    def __init__(self, input_size, hidden_size, solver_type="dopri5"):
+        super(ODELSTMCell, self).__init__()
+        self.solver_type = solver_type
+        self.lstm = nn.LSTMCell(input_size, hidden_size)
+        # 1 hidden layer NODE
+        self.f_node = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size),
+            nn.Tanh(),
+            nn.Linear(hidden_size, hidden_size),
+        )
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.node = NeuralDE(self.f_node, solver=solver_type)
+
+    def forward(self, input, hx, ts):
+        new_h, new_c = self.lstm(input, hx)
+        batch_size = ts.size(0)
+        indices = torch.argsort(ts)  # different timestamps for each batch
+        device = input.device
+        s_sort = ts[indices]  # sort these timestamps into a timeline for all batch entries
+        s_sort += torch.linspace(0, 1e-3, batch_size,
+                                 device=device)  # so that the each time point is bigger than the previous one
+        trajectory = self.node.trajectory(new_h,
+                                          s_sort)  # predict for this timeline the hidden states for all batch entries
+        new_h = trajectory[indices, torch.arange(batch_size,
+                                                 device=device)]  # For each batch entry select the relevant next timestamp
+
+        return new_h, new_c
 
 
 NETWORK_TYPES = {
