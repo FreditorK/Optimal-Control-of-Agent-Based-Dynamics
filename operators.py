@@ -77,8 +77,8 @@ def div(u, vars):
     Tensor (batch, x_dim):param vars: variables to differentiate in respect to
     Tensor (batch, 1):return: divergence div(u) w.r.t. vars
     """
-    u_grad_sum = grad(outputs=u, inputs=vars, create_graph=True, grad_outputs=torch.ones_like(u))
-    return sum(u_grad_sum)
+    u_grad = grad(outputs=u, inputs=vars, create_graph=True, grad_outputs=torch.ones_like(u))
+    return sum(u_grad)
 
 
 def Δ(u, vars):
@@ -88,10 +88,9 @@ def Δ(u, vars):
     Tensor (batch, x_dim):param vars: variables to differentiate in respect to
     Tensor (batch, 1):return: laplacian Δu w.r.t. vars
     """
-    u_grad_sum = sum(grad(u, vars, create_graph=True, grad_outputs=torch.ones_like(u)))
-    u_hess_diag = sum(grad(u_grad_sum, vars, create_graph=True, grad_outputs=torch.ones_like(u_grad_sum)))
-    u_lap = torch.sum(u_hess_diag, dim=-1).unsqueeze(1)
-    return u_lap
+    if isinstance(vars, list):
+        return sum([div(div(u, vars[i]), vars[i]) for i in range(len(vars))])
+    return div(div(u, vars), vars)
 
 
 def H(u, vars):
