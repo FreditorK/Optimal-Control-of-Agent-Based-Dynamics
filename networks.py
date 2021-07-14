@@ -174,11 +174,12 @@ class FeedForwardNetwork(nn.Module):
             nn.SiLU(),
             nn.Linear(hidden_dim, output_dim),
         )
+        self.shortcut = nn.Linear(input_dim, output_dim)
 
     def forward(self, *vars):
         xt = torch.cat(vars, dim=1)
         weights = self.y_net(xt)
-        return weights
+        return weights + self.shortcut(xt)
 
 
 class ODELSTMCell(nn.Module):
