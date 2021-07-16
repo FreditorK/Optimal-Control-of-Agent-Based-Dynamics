@@ -59,10 +59,34 @@ def b_func_b(x, y):
     return torch.einsum("bi, bi -> b", x, y).unsqueeze(1)
 
 
+def minus_(x, y):
+    if isinstance(x, list):
+        x = torch.cat(x, dim=-1)
+    if isinstance(y, list):
+        y = torch.cat(y, dim=-1)
+
+    return x - y
+
+
+def plus_(x, y):
+    if isinstance(x, list):
+        x = torch.cat(x, dim=-1)
+    if isinstance(y, list):
+        y = torch.cat(y, dim=-1)
+
+    return x + y
+
+
+def cat(x):
+    return torch.cat(x, dim=-1)
+
+
 mdotb = Infix(m_func_b)
 bdotm = Infix(b_func_m)
 mdotm = Infix(m_func_m)
 bdotb = Infix(b_func_b)
+m = Infix(minus_)
+p = Infix(plus_)
 
 
 def D(u, vars):

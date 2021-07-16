@@ -7,6 +7,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from optimisers import OPTIMIZERS
 import torch
 import os.path
+from operators import D
 import numpy as np
 
 
@@ -98,6 +99,11 @@ class DeepPDESolver(Solver):
             xs = [torch.FloatTensor([x]).to(self.device).unsqueeze(0) for x in args]
             u = self.f_θ(*xs)
         return u.cpu().numpy().flatten()
+
+    def D_u(self, *args):
+        xs = [torch.FloatTensor([x]).to(self.device).unsqueeze(0).requires_grad_() for x in args]
+        u = self.f_θ(*xs)
+        return D(u, xs[:-1]).detach().cpu().numpy().flatten()
 
     def sample(self):
         domain_var_sample = self.domain_sampler.sample_var()[0]  # (func(vars), batch, 1)
