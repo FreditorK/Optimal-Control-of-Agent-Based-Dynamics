@@ -102,7 +102,7 @@ class DeepPDESolver(Solver):
 
     def D_u(self, *args):
         xs = [torch.FloatTensor([x]).to(self.device).unsqueeze(0).requires_grad_() for x in args]
-        u = self.f_θ(*xs)
+        u = self.f_θ(*xs) #torch.square(torch.cat(xs[:-1], dim=-1)+0.25)
         return D(u, xs[:-1]).detach().cpu().numpy().flatten()
 
     def sample(self):
