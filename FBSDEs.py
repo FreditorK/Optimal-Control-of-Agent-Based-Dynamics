@@ -44,7 +44,12 @@ class FBSDESolver:
     def J(self, *args):
         vars = [torch.FloatTensor([x]).to(self.device).unsqueeze(0).requires_grad_() for x in args]
         Y_pred = self.Y_net(*vars)
-        return Y_pred
+        return Y_pred.detach().flatten().cpu().numpy()
+
+    def D_J(self, *args):
+        vars = [torch.FloatTensor([x]).to(self.device).unsqueeze(0).requires_grad_() for x in args]
+        Y_pred = self.Y_net(*vars)
+        return D(Y_pred, vars[:-1]).flatten().detach().cpu().numpy()
 
     def simulate_processes(self, num_samples):
         with torch.no_grad():
