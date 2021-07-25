@@ -76,11 +76,11 @@ class DeepPDESolver(Solver):
         self.f_θ_optimizer = OPTIMIZERS[self.optimiser](self.f_θ.parameters(), lr=model_config["learning_rate"])
 
         if model_config["method"] == "Ritz":
-            self.domain_criterion = lambda u, var: \
-                model_config["loss_weights"][0] * (pde_config.equation(u, var)).mean()
+            self.domain_criterion = lambda us, vars: \
+                model_config["loss_weights"][0] * sum([(pde_config.equation(u, var)).mean() for u, var in zip(us, vars)])
         else:
-            self.domain_criterion = lambda u, var: \
-                model_config["loss_weights"][0] * torch.square(pde_config.equation(u, var)).mean()
+            self.domain_criterion = lambda us, vars: \
+                model_config["loss_weights"][0] * sum([torch.square(pde_config.equation(u, var)).mean() for u, var in zip(us, vars)])
 
         self.boundary_criterion = lambda us, vars: \
             model_config["loss_weights"][1] * sum(
@@ -106,17 +106,17 @@ class DeepPDESolver(Solver):
         return D(u, xs[:-1]).detach().cpu().numpy().flatten()
 
     def sample(self):
-        domain_var_sample = self.domain_sampler.sample_var()[0]  # (func(vars), batch, 1)
+        domain_var_sample = self.domain_sampler.sample_var()  # (func(vars), batch, 1)
         boundary_vars_sample = self.boundary_sampler.sample_var()  # (subdomain(vars), batch, 1)
 
         return domain_var_sample, boundary_vars_sample
 
     def backprop_loss(self, _, domain_var_sample, boundary_vars_sample):
-        domain_u = self.f_θ(*domain_var_sample)
+        domain_u = [self.f_θ(*sample) for sample in domain_var_sample]
         boundary_us = [self.f_θ(*sample) for sample in boundary_vars_sample]
 
         boundary_loss = self.boundary_criterion(boundary_us, vars=boundary_vars_sample)
-        domain_loss = self.domain_criterion(domain_u, var=domain_var_sample)
+        domain_loss = self.domain_criterion(domain_u, vars=domain_var_sample)
 
         loss = domain_loss + boundary_loss
 

@@ -137,7 +137,7 @@ class ResLayer(nn.Module):
         super(ResLayer, self).__init__()
         self.net = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            nn.ELU(),
+            nn.SiLU(),
             nn.Linear(hidden_dim, output_dim)
         )
 
@@ -174,12 +174,11 @@ class FeedForwardNetwork(nn.Module):
             nn.SiLU(),
             nn.Linear(hidden_dim, output_dim),
         )
-        self.shortcut = nn.Linear(input_dim, output_dim)
 
     def forward(self, *vars):
         xt = torch.cat(vars, dim=1)
         weights = self.y_net(xt)
-        return weights + self.shortcut(xt)
+        return weights
 
 
 class MeanNetwork(nn.Module):
@@ -193,24 +192,13 @@ class MeanNetwork(nn.Module):
             nn.SiLU(),
             nn.Linear(hidden_dim * 2, hidden_dim),
         )
-        self.shortcut = nn.Linear(input_dim + 1, hidden_dim)
-
-        self.y_net_2 = nn.Sequential(
-            nn.Linear(hidden_dim * 2, hidden_dim * 2),
-            nn.SiLU(),
-            nn.Linear(hidden_dim * 2, hidden_dim),
-            nn.SiLU(),
-            nn.Linear(hidden_dim, output_dim),
-        )
-        self.shortcut_2 = nn.Linear(input_dim + 1, output_dim)
 
     def forward(self, *vars):
         x = torch.cat(vars[:-1], dim=1)
         mean = torch.mean(x, dim=1, keepdim=True)
         xt_mean = torch.cat((x, vars[-1], mean), dim=1)
         weights = self.y_net(xt_mean)
-        weights = self.y_net_2(torch.cat((weights, self.shortcut(xt_mean)), dim=1))
-        return weights + self.shortcut_2(xt_mean)
+        return weights
 
 
 NETWORK_TYPES = {
@@ -222,32 +210,3 @@ NETWORK_TYPES = {
     "FF": FeedForwardNetwork,
     "MEAN": MeanNetwork
 }
-
-"""
-class FeedForwardNetwork(nn.Module):
-
-    def __init__(self, input_dim, hidden_dim, output_dim):
-        super(FeedForwardNetwork, self).__init__()
-        self.y_net = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 36),
-        )
-
-        self.zero_net = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 36),
-            nn.Sigmoid()
-        )
-
-    def forward(self, *vars):
-        xt = torch.cat(vars, dim=1)
-        weights = self.y_net(xt)
-        zeroed = torch.round(self.zero_net(xt))
-        return torch.sum(zeroed*weights*torch.cat([vars[0]**i * vars[1]**j for i, j in product(range(6), range(6))], dim=1), dim=-1)
-"""
