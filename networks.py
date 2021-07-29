@@ -185,20 +185,68 @@ class MeanNetwork(nn.Module):
 
     def __init__(self, input_dim, hidden_dim, output_dim):
         super(MeanNetwork, self).__init__()
-        self.y_net = nn.Sequential(
-            nn.Linear(input_dim + 1, hidden_dim),
-            nn.SiLU(),
-            nn.Linear(hidden_dim, hidden_dim * 2),
-            nn.SiLU(),
-            nn.Linear(hidden_dim * 2, hidden_dim),
+        self.net = nn.Sequential(
+            ResLayer(input_dim + 1, hidden_dim, 2 * hidden_dim),
+            ResLayer(2 * hidden_dim, 4 * hidden_dim, 2 * hidden_dim),
+            ResLayer(2 * hidden_dim, hidden_dim, output_dim)
         )
 
     def forward(self, *vars):
         x = torch.cat(vars[:-1], dim=1)
-        mean = torch.mean(x, dim=1, keepdim=True)
-        xt_mean = torch.cat((x, vars[-1], mean), dim=1)
-        weights = self.y_net(xt_mean)
-        return weights
+        mean_cat = torch.cat((x, torch.mean(x, dim=-1, keepdim=True), vars[-1]), dim=-1)
+        return self.net(mean_cat)
+
+
+class DenseBlock(nn.Module):
+
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(DenseBlock, self).__init__()
+        self.net_1 = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.SiLU()
+        )
+
+        self.net_2 = nn.Sequential(
+            nn.Linear(input_dim + hidden_dim, hidden_dim),
+            nn.SiLU()
+        )
+
+        self.net_3 = nn.Sequential(
+            nn.Linear(input_dim + 2*hidden_dim, hidden_dim),
+            nn.SiLU()
+        )
+
+        self.net_4 = nn.Sequential(
+            nn.Linear(input_dim + 3 * hidden_dim, hidden_dim),
+            nn.SiLU()
+        )
+
+        self.net_5 = nn.Sequential(
+            nn.Linear(input_dim + 4 * hidden_dim, hidden_dim),
+            nn.SiLU(),
+            nn.Linear(hidden_dim, output_dim)
+        )
+
+    def forward(self, x):
+        out_1 = self.net_1(x)
+        out_2 = self.net_2(torch.cat((x, out_1), dim=-1))
+        out_3 = self.net_3(torch.cat((x, out_1, out_2), dim=-1))
+        out_4 = self.net_4(torch.cat((x, out_1, out_2, out_3), dim=-1))
+        return self.net_5(torch.cat((x, out_1, out_2, out_3, out_4), dim=-1))
+
+
+class DENSENetwork(nn.Module):
+
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(DENSENetwork, self).__init__()
+        self.net = nn.Sequential(
+            DenseBlock(input_dim, hidden_dim, hidden_dim),
+            DenseBlock(hidden_dim, hidden_dim, output_dim)
+        )
+
+    def forward(self, *vars):
+        xt = torch.cat(vars, dim=1)
+        return self.net(xt)
 
 
 NETWORK_TYPES = {
@@ -208,5 +256,6 @@ NETWORK_TYPES = {
     "RES": RESNetwork,
     "MINI": MININetwork,
     "FF": FeedForwardNetwork,
-    "MEAN": MeanNetwork
+    "MEAN": MeanNetwork,
+    "DENSE": DENSENetwork
 }

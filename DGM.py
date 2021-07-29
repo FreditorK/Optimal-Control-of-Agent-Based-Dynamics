@@ -21,6 +21,7 @@ class Solver(ABC):
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
         else:
+            print("Using CPU!")
             self.device = torch.device("cpu")
 
         self.sampling_method = model_config["sampling_method"]
