@@ -20,7 +20,7 @@ class FBSDESolver:
         self.batch_size = model_config["batch_size"]
         self.num_discretisation_steps = model_config["num_discretisation_steps"]
         self.dt = (fbsde_config.terminal_time / model_config["num_discretisation_steps"]) * torch.ones(
-            (self.batch_size, 1))
+            (self.batch_size, 1)).to(self.device)
         self.var_dim = fbsde_config.var_dim
         self.init_sampling_func = fbsde_config.init_sampling_func
         self.control_noise = fbsde_config.control_noise
@@ -57,7 +57,7 @@ class FBSDESolver:
             Y_preds = np.zeros((self.num_discretisation_steps, num_samples, 1))
             ts = np.zeros((self.num_discretisation_steps, num_samples, 1))
             dt = self.dt[:num_samples]
-            X = self.init_sampling_func(torch.rand(1, self.var_dim).repeat(num_samples, 1))
+            X = self.init_sampling_func(torch.rand(1, self.var_dim).repeat(num_samples, 1)).to(self.device)
             sqrt_dt = torch.sqrt(dt)
             t = Variable(dt * 0)
             Y = self.Y_net(X, t)
@@ -67,7 +67,7 @@ class FBSDESolver:
             for i in range(1, self.num_discretisation_steps):
                 t = Variable(dt * i)
                 sigma = self.sigma(X, t)
-                dW = sqrt_dt * torch.randn(num_samples, self.var_dim)
+                dW = sqrt_dt * torch.randn(num_samples, self.var_dim).to(self.device)
                 X = X + self.b(X, t) * dt + torch.einsum("bij, bj -> bi", sigma, dW)
                 Y = self.Y_net(X, t)
                 X_preds[i] = X.detach().cpu().numpy()

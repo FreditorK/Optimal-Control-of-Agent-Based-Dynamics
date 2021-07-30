@@ -181,14 +181,30 @@ class FeedForwardNetwork(nn.Module):
         return weights
 
 
-class MeanNetwork(nn.Module):
+class RESMeanNetwork(nn.Module):
 
     def __init__(self, input_dim, hidden_dim, output_dim):
-        super(MeanNetwork, self).__init__()
+        super(RESMeanNetwork, self).__init__()
         self.net = nn.Sequential(
             ResLayer(input_dim + 1, hidden_dim, 2 * hidden_dim),
             ResLayer(2 * hidden_dim, 4 * hidden_dim, 2 * hidden_dim),
             ResLayer(2 * hidden_dim, hidden_dim, output_dim)
+        )
+
+    def forward(self, *vars):
+        x = torch.cat(vars[:-1], dim=1)
+        mean_cat = torch.cat((x, torch.mean(x, dim=-1, keepdim=True), vars[-1]), dim=-1)
+        return self.net(mean_cat)
+
+
+class DENSEMeanNetwork(nn.Module):
+
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(DENSEMeanNetwork, self).__init__()
+        self.net = nn.Sequential(
+            DenseBlock(input_dim+1, 2 * hidden_dim, hidden_dim),
+            DenseBlock(hidden_dim, 2 * hidden_dim, hidden_dim),
+            DenseBlock(hidden_dim, 2 * hidden_dim, output_dim)
         )
 
     def forward(self, *vars):
@@ -212,7 +228,7 @@ class DenseBlock(nn.Module):
         )
 
         self.net_3 = nn.Sequential(
-            nn.Linear(input_dim + 2*hidden_dim, hidden_dim),
+            nn.Linear(input_dim + 2 * hidden_dim, hidden_dim),
             nn.SiLU()
         )
 
@@ -240,8 +256,9 @@ class DENSENetwork(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super(DENSENetwork, self).__init__()
         self.net = nn.Sequential(
-            DenseBlock(input_dim, hidden_dim, hidden_dim),
-            DenseBlock(hidden_dim, hidden_dim, output_dim)
+            DenseBlock(input_dim, 2 * hidden_dim, hidden_dim),
+            DenseBlock(hidden_dim, 2 * hidden_dim, hidden_dim),
+            DenseBlock(hidden_dim, 2 * hidden_dim, output_dim)
         )
 
     def forward(self, *vars):
@@ -256,6 +273,7 @@ NETWORK_TYPES = {
     "RES": RESNetwork,
     "MINI": MININetwork,
     "FF": FeedForwardNetwork,
-    "MEAN": MeanNetwork,
-    "DENSE": DENSENetwork
+    "RESMEAN": RESMeanNetwork,
+    "DENSE": DENSENetwork,
+    "DENSEMEAN": DENSEMeanNetwork
 }

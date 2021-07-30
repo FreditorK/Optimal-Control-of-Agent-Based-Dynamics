@@ -67,9 +67,9 @@ class DeepPDESolver(Solver):
                                                                                "conditions does not match" \
                                                                                "number of sampling functions!"
         self.domain_sampler = SAMPLING_METHODS[self.sampling_method](pde_config.domain_func, pde_config.var_dim,
-                                                                     device=self.device)
+                                                                     self.device, pde_config.__class__.__name__, False)
         self.boundary_sampler = SAMPLING_METHODS[self.sampling_method](pde_config.boundary_func, pde_config.var_dim,
-                                                                       device=self.device)
+                                                                       self.device, pde_config.__class__.__name__, True)
         self.f_θ = NETWORK_TYPES[self.network_type](input_dim=pde_config.var_dim,
                                                     hidden_dim=model_config["hidden_dim"],
                                                     output_dim=pde_config.sol_dim).to(self.device)
@@ -141,10 +141,10 @@ class DGMPIASolver(Solver):
         self.domain_sampler = SAMPLING_METHODS[self.sampling_method](hbj_config.domain_func, hbj_config.var_dim_J,
                                                                      device=self.device)
         self.boundary_sampler_J = SAMPLING_METHODS[self.sampling_method](hbj_config.boundary_func_J,
-                                                                         hbj_config.var_dim_J,
+                                                                         hbj_config.var_dim_J, hbj_config.__class__.__name__,
                                                                          device=self.device)
         self.boundary_sampler_u = SAMPLING_METHODS[self.sampling_method](hbj_config.boundary_func_u,
-                                                                         len(self.control_vars),
+                                                                         len(self.control_vars), hbj_config.__class__.__name__,
                                                                          device=self.device)
 
         self.f_θ = NETWORK_TYPES[self.network_type](input_dim=hbj_config.var_dim_J,
