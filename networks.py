@@ -74,7 +74,7 @@ class GRUNetwork(nn.Module):
 
         self.init_denominator = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            nn.ELU(),
+            nn.SiLU(),
         )
 
         self.denominator_1 = nn.GRUCell(input_dim, hidden_dim)
@@ -82,7 +82,7 @@ class GRUNetwork(nn.Module):
 
         self.init_numerator = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            nn.ELU(),
+            nn.SiLU(),
         )
 
         self.numerator_1 = nn.GRUCell(input_dim, hidden_dim)
@@ -94,7 +94,7 @@ class GRUNetwork(nn.Module):
 
         self.interpolator = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            nn.ELU(),
+            nn.SiLU(),
             nn.Linear(hidden_dim, 1),
             nn.Sigmoid()
         )

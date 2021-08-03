@@ -25,6 +25,9 @@ class Solver(ABC):
             self.device = torch.device("cpu")
 
         self.sampling_method = model_config["sampling_method"]
+        self.sampling_method_boundary = model_config["sampling_method"]
+        if "sampling_method_boundary" in model_config:
+            self.sampling_method_boundary = model_config["sampling_method_boundary"]
         self.network_type = model_config["network_type"]
         self.optimiser = model_config["optimiser"]
 
@@ -68,7 +71,7 @@ class DeepPDESolver(Solver):
                                                                                "number of sampling functions!"
         self.domain_sampler = SAMPLING_METHODS[self.sampling_method](pde_config.domain_func, pde_config.var_dim,
                                                                      self.device, pde_config.__class__.__name__, False)
-        self.boundary_sampler = SAMPLING_METHODS[self.sampling_method](pde_config.boundary_func, pde_config.var_dim,
+        self.boundary_sampler = SAMPLING_METHODS[self.sampling_method_boundary](pde_config.boundary_func, pde_config.var_dim,
                                                                        self.device, pde_config.__class__.__name__, True)
         self.f_θ = NETWORK_TYPES[self.network_type](input_dim=pde_config.var_dim,
                                                     hidden_dim=model_config["hidden_dim"],
@@ -103,7 +106,7 @@ class DeepPDESolver(Solver):
 
     def D_u(self, *args):
         xs = [torch.FloatTensor([x]).to(self.device).unsqueeze(0).requires_grad_() for x in args]
-        u = self.f_θ(*xs)  # torch.square(torch.cat(xs[:-1], dim=-1)+0.25)
+        u = self.f_θ(*xs)
         return D(u, xs[:-1]).detach().cpu().numpy().flatten()
 
     def sample(self):
@@ -120,6 +123,8 @@ class DeepPDESolver(Solver):
         domain_loss = self.domain_criterion(domain_u, vars=domain_var_sample)
 
         loss = domain_loss + boundary_loss
+
+        self.domain_sampler.update(domain_u, domain_var_sample)
 
         self.f_θ_optimizer.zero_grad()
         loss.backward()
@@ -143,7 +148,7 @@ class DGMPIASolver(Solver):
         self.boundary_sampler_J = SAMPLING_METHODS[self.sampling_method](hbj_config.boundary_func_J,
                                                                          hbj_config.var_dim_J, hbj_config.__class__.__name__,
                                                                          device=self.device)
-        self.boundary_sampler_u = SAMPLING_METHODS[self.sampling_method](hbj_config.boundary_func_u,
+        self.boundary_sampler_u = SAMPLING_METHODS[self.sampling_method_boundary](hbj_config.boundary_func_u,
                                                                          len(self.control_vars), hbj_config.__class__.__name__,
                                                                          device=self.device)
 

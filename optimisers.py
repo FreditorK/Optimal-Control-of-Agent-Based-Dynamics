@@ -49,9 +49,9 @@ class Ralamb(Optimizer):
 
                 # Decay the first and second moment running average coefficient
                 # m_t
-                exp_avg.mul_(beta1).add_(1 - beta1, grad)
+                exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
                 # v_t
-                exp_avg_sq.mul_(beta2).addcmul_(1 - beta2, grad, grad)
+                exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
 
                 state['step'] += 1
                 buffered = self.buffer[int(state['step'] % 10)]
@@ -81,9 +81,9 @@ class Ralamb(Optimizer):
                 radam_step = p_data_fp32.clone()
                 if N_sma >= 5:
                     denom = exp_avg_sq.sqrt().add_(group['eps'])
-                    radam_step.addcdiv_(-radam_step_size * group['lr'], exp_avg, denom)
+                    radam_step.addcdiv_(exp_avg, denom, value=-radam_step_size * group['lr'])
                 else:
-                    radam_step.add_(-radam_step_size * group['lr'], exp_avg)
+                    radam_step.add_(exp_avg, alpha=-radam_step_size * group['lr'])
 
                 radam_norm = radam_step.pow(2).sum().sqrt()
                 weight_norm = p.data.pow(2).sum().sqrt().clamp(0, 10)
@@ -97,9 +97,9 @@ class Ralamb(Optimizer):
                 state['trust_ratio'] = trust_ratio
 
                 if N_sma >= 5:
-                    p_data_fp32.addcdiv_(-radam_step_size * group['lr'] * trust_ratio, exp_avg, denom)
+                    p_data_fp32.addcdiv_(exp_avg, denom, value=-radam_step_size * group['lr'] * trust_ratio)
                 else:
-                    p_data_fp32.add_(-radam_step_size * group['lr'] * trust_ratio, exp_avg)
+                    p_data_fp32.add_(exp_avg, alpha=-radam_step_size * group['lr'] * trust_ratio)
 
                 p.data.copy_(p_data_fp32)
 
@@ -202,6 +202,7 @@ def RangerLars(params, alpha=0.5, k=6, *args, **kwargs):
 
 OPTIMIZERS = {
     "Adam": Adam,
+    "LookaheadAdam": LookaheadAdam,
     "Ralamb": Ralamb,
     "RangerLars": RangerLars
 }
