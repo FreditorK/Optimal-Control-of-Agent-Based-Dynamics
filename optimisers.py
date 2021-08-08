@@ -1,7 +1,7 @@
 import torch.nn as nn
 from torch.autograd import Function
 from torch.optim.optimizer import Optimizer
-from torch.optim import Adam
+from torch.optim import Adam, SGD, Adagrad
 from collections import defaultdict
 import torch
 import math
@@ -202,6 +202,8 @@ def RangerLars(params, alpha=0.5, k=6, *args, **kwargs):
 
 OPTIMIZERS = {
     "Adam": Adam,
+    "SGD": SGD,
+    "Adagrad": Adagrad,
     "LookaheadAdam": LookaheadAdam,
     "Ralamb": Ralamb,
     "RangerLars": RangerLars

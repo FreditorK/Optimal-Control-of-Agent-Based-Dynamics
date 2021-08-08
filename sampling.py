@@ -1,11 +1,13 @@
 import torch
+import numpy as np
 
 PATH_SPACES = {
     "AC": {
         "SDE": lambda X, u, t, dt, dW: 0 * X * dt + torch.einsum("bij, bj -> bi", torch.diag_embed(X * 0 + 1), dW),
         "terminal_time": 0.3,
         "N_range": (15, 30),
-        "control": lambda J, X, t: 0
+        "control": lambda J, X, t: 0,
+        "domain": (-np.inf, np.inf)
     }
 }
 
@@ -76,6 +78,7 @@ class PathSampler:
         self.terminal_time = PATH_SPACES[self.name]["terminal_time"]
         self.N_range = PATH_SPACES[self.name]["N_range"]
         self.opt_control = PATH_SPACES[self.name]["control"]
+        self.domain = PATH_SPACES[self.name]["domain"]
         self.us = [torch.zeros(size=(batch_size, 1)) for f, batch_size in self.funcs]
 
     def sample_var(self):
@@ -88,19 +91,22 @@ class PathSampler:
     def sample_batch(self, batch_size, u, f, idx):
         dt = self.terminal_time / torch.randint(low=self.N_range[0], high=self.N_range[1], size=(batch_size, 1))
         sqrt_dt = torch.sqrt(dt)
-        dW = sqrt_dt * torch.randn(128, self.var_dim - 1)
+        dW = sqrt_dt * torch.randn(batch_size, self.var_dim - 1)
         X = torch.cat(self.current_batch[idx][:-1], dim=-1)
         X = X + self.sde(X, u, self.current_batch[idx][-1], dt, dW)
         new_mask = torch.where(self.current_batch[idx][-1] > self.terminal_time, 1, 0)
         old_mask = -(new_mask - 1)
         new_X = torch.cat(f([torch.zeros(size=(batch_size, 1)).uniform_() for _ in range(self.var_dim-1)]), dim=-1)
         X = old_mask * X + new_mask * new_X
-        self.current_batch[idx] = [X[:, None, i] for i in range(self.var_dim - 1)] + [torch.fmod(self.current_batch[idx][-1] + dt, self.terminal_time)]
+        self.current_batch[idx] = [torch.clamp(X[:, None, i], min=self.domain[0], max=self.domain[1]) for i in range(self.var_dim - 1)] + [torch.fmod(self.current_batch[idx][-1] + dt, self.terminal_time)]
 
         return self.current_batch[idx]
 
     def update(self, Js, var_samples):
-        self.us = [self.opt_control(J, v[:-1], v[-1]).detach() for J, v in zip(Js, var_samples)]
+        #print([torch.mean(self.opt_control(J, v[:-1], v[-1]), dim=0).detach().cpu() for J, v in zip(Js, var_samples)])
+        #print(self.alpha)
+        self.us = [self.opt_control(J, v[:-1], v[-1]).detach().cpu() for J, v in zip(Js, var_samples)] #[-0.1*(torch.cat(v[:-1], dim=-1) - 0.2).detach().cpu() for J, v in zip(Js, var_samples)] #
+        #self.alpha = (self.alpha*1.02) if self.alpha < 0.9 else 1.0
 
 
 SAMPLING_METHODS = {
