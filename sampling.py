@@ -104,7 +104,7 @@ class PathSampler:
 
     def update(self, Js, var_samples):
         #print([torch.mean(self.opt_control(J, v[:-1], v[-1]), dim=0).detach().cpu() for J, v in zip(Js, var_samples)])
-        #print(self.alpha)
+        #print(self.alpha)  + (torch.rand_like(v[0].detach().cpu())-0.5)*(1/15)*loss
         self.us = [self.opt_control(J, v[:-1], v[-1]).detach().cpu() for J, v in zip(Js, var_samples)] #[-0.1*(torch.cat(v[:-1], dim=-1) - 0.2).detach().cpu() for J, v in zip(Js, var_samples)] #
         #self.alpha = (self.alpha*1.02) if self.alpha < 0.9 else 1.0
 
