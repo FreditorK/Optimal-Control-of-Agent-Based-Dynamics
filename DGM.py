@@ -115,7 +115,7 @@ class DeepPDESolver(Solver):
 
         return domain_var_sample, boundary_vars_sample
 
-    def backprop_loss(self, _, domain_var_sample, boundary_vars_sample):
+    def backprop_loss(self, i, domain_var_sample, boundary_vars_sample):
         domain_u = [self.f_θ(*sample) for sample in domain_var_sample]
         boundary_us = [self.f_θ(*sample) for sample in boundary_vars_sample]
 
@@ -124,7 +124,7 @@ class DeepPDESolver(Solver):
 
         loss = domain_loss + boundary_loss
 
-        self.domain_sampler.update(domain_u, domain_var_sample)
+        self.domain_sampler.update(domain_u, domain_var_sample, i)
 
         self.f_θ_optimizer.zero_grad()
         loss.backward()

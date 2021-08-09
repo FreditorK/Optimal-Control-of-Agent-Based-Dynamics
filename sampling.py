@@ -80,6 +80,7 @@ class PathSampler:
         self.opt_control = PATH_SPACES[self.name]["control"]
         self.domain = PATH_SPACES[self.name]["domain"]
         self.us = [torch.zeros(size=(batch_size, 1)) for f, batch_size in self.funcs]
+        self.alpha = 1
 
     def sample_var(self):
         with torch.no_grad():
@@ -102,10 +103,11 @@ class PathSampler:
 
         return self.current_batch[idx]
 
-    def update(self, Js, var_samples):
+    def update(self, Js, var_samples, i):
         #print([torch.mean(self.opt_control(J, v[:-1], v[-1]), dim=0).detach().cpu() for J, v in zip(Js, var_samples)])
         #print(self.alpha)  + (torch.rand_like(v[0].detach().cpu())-0.5)*(1/15)*loss
-        self.us = [self.opt_control(J, v[:-1], v[-1]).detach().cpu() for J, v in zip(Js, var_samples)] #[-0.1*(torch.cat(v[:-1], dim=-1) - 0.2).detach().cpu() for J, v in zip(Js, var_samples)] #
+        self.us = [(1-self.alpha)*self.opt_control(J, v[:-1], v[-1]).detach().cpu() for J, v in zip(Js, var_samples)] #[-0.1*(torch.cat(v[:-1], dim=-1) - 0.2).detach().cpu() for J, v in zip(Js, var_samples)] #
+        self.alpha *= 0.99
         #self.alpha = (self.alpha*1.02) if self.alpha < 0.9 else 1.0
 
 
