@@ -80,9 +80,9 @@ class PathSampler:
         self.domain = PATH_SPACES[self.name]["domain"]
         self.us = [torch.zeros(size=(batch_size, 1)) for f, batch_size in self.funcs]
         self.alpha = 1
+        self.boundary_sampler_dependency = False
         self.boundary_memory = torch.zeros(size=(1, var_dim))
-        self.app = []
-        print(self.current_batch[0][-1][0])
+        self.app = [] # this can be removed, plotting purposes
 
     def sample_var(self):
         with torch.no_grad():
@@ -102,24 +102,21 @@ class PathSampler:
         new_X = torch.cat(f([torch.zeros(size=(batch_size, 1)).uniform_() for _ in range(self.var_dim)])[:-1], dim=-1)
         X = old_mask * X + new_mask * new_X
         self.current_batch[idx] = [torch.clamp(X[:, None, i], min=self.domain[0], max=self.domain[1]) for i in
-                                   range(self.var_dim - 1)] + [old_mask*(self.current_batch[idx][-1]+dt)]
-        '''
-        terminal = X[new_mask.flatten() == 1, :]
-        length = terminal.shape[0]
-        if length > 0:
-            boundary_batch = torch.cat((terminal, torch.ones(length, 1)*self.terminal_time), dim=-1)
-            self.boundary_memory = torch.cat((boundary_batch, self.boundary_memory[:-length]), dim=0)
-        else:
-            return self.sample_batch(batch_size, u, f, idx)
-        '''
-        self.app.append(torch.clamp(X[0], min=-1, max=1))
+                                   range(self.var_dim - 1)] + [old_mask*(self.current_batch[idx][-1]+ dt)]
+
+        if self.boundary_sampler_dependency:
+            terminal = X[new_mask.flatten() == 1, :]
+            length = terminal.shape[0]
+            if length > 0:
+                boundary_batch = torch.cat((terminal, torch.ones(length, 1) * self.terminal_time), dim=-1)
+                self.boundary_memory = torch.cat((boundary_batch, self.boundary_memory[:-length]), dim=0)
+
+        self.app.append(torch.clamp(X[0], min=-1, max=1)) # this can be removed
         return self.current_batch[idx]
 
     def update(self, Js, var_samples, i):
         self.us = [(1-self.alpha)*self.opt_control(J, v[:-1], v[-1]).detach().cpu() for J, v in zip(Js, var_samples)] #[-0.1*(torch.cat(v[:-1], dim=-1) - 0.2).detach().cpu() for J, v in zip(Js, var_samples)] #[-6*(torch.cat(v[:-1], dim=-1) - 0.2).detach().cpu() for J, v in zip(Js, var_samples)] #
-        self.alpha *= 0.999
-        #if i % 10 == 0:
-            #print([ self.current_batch[0][i][0] for i in range(self.var_dim-1)])
+        self.alpha *= 0.998
 
 
 class TerminalPathSampler:
@@ -135,6 +132,7 @@ class TerminalPathSampler:
         self.funcs = funcs
         self.var_dim = var_dim
         self.current_batch = [f([torch.zeros(size=(batch_size, 1)).uniform_() for _ in range(var_dim)]) for f, batch_size in self.funcs]
+        self.domain_sampler.boundary_sampler_dependency = True
         self.domain_sampler.boundary_memory = torch.cat([torch.cat(f([torch.zeros(size=(4*batch_size, 1)).uniform_() for _ in range(var_dim)]), dim=-1) for f, batch_size in self.funcs], dim=0)
 
     def sample_var(self):
@@ -149,8 +147,6 @@ class TerminalPathSampler:
         indices = torch.randint(0, size, (batch_size, ))
         X = self.domain_sampler.boundary_memory[indices]
         self.current_batch[idx] = [X[:, None, i] for i in range(self.var_dim)]
-        for _ in range(10):
-            self.domain_sampler.sample_var()
         return self.current_batch[idx]
 
 
