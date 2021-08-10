@@ -70,9 +70,9 @@ class DeepPDESolver(Solver):
                                                                                "conditions does not match" \
                                                                                "number of sampling functions!"
         self.domain_sampler = SAMPLING_METHODS[self.sampling_method](pde_config.domain_func, pde_config.var_dim,
-                                                                     self.device, pde_config.__class__.__name__, False)
-        self.boundary_sampler = SAMPLING_METHODS[self.sampling_method_boundary](pde_config.boundary_func, pde_config.var_dim,
-                                                                       self.device, pde_config.__class__.__name__, True)
+                                                                     self.device, pde_config.__class__.__name__)
+        self.boundary_sampler = SAMPLING_METHODS[self.sampling_method_boundary + "_bound"](pde_config.boundary_func, pde_config.var_dim,
+                                                                       self.device, pde_config.__class__.__name__, self.domain_sampler)
         self.f_θ = NETWORK_TYPES[self.network_type](input_dim=pde_config.var_dim,
                                                     hidden_dim=model_config["hidden_dim"],
                                                     output_dim=pde_config.sol_dim).to(self.device)
