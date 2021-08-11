@@ -124,7 +124,7 @@ class DeepPDESolver(Solver):
 
         loss = domain_loss + boundary_loss
 
-        self.domain_sampler.update(domain_u, domain_var_sample, i)
+        self.domain_sampler.update(domain_u, domain_var_sample)
 
         self.f_θ_optimizer.zero_grad()
         loss.backward()

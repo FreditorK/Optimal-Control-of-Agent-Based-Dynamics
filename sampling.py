@@ -70,14 +70,15 @@ class PathSampler:
         :param var_funcs: sampling functions for each variable
         :param device: cpu/gpu
         """
-        self.alpha = torch.tensor(1.0, requires_grad=True)
-        self.alpha_optimizer = Adam([self.alpha], lr=1e-3)
         self.name = args[0]
         self.device = device
         self.funcs = funcs
         self.var_dim = var_dim
         self.sde = PATH_SPACES[self.name]["SDE"]
+        self.objective = PATH_SPACES[self.name]["objective"]
         self.current_batch = [f([torch.zeros(size=(batch_size, 1)).uniform_() for _ in range(var_dim)]) for f, batch_size in self.funcs]
+        self.alpha = [torch.ones((1, var_dim-1), requires_grad=True) for _, batch_size in self.funcs]
+        self.alpha_optimizer = Adam(self.alpha, lr=1e-3)
         self.terminal_time = PATH_SPACES[self.name]["terminal_time"]
         self.N_range = PATH_SPACES[self.name]["N_range"]
         self.opt_control = PATH_SPACES[self.name]["control"]
@@ -86,12 +87,15 @@ class PathSampler:
         self.boundary_sampler_dependency = False
         self.boundary_memory = torch.zeros(size=(1, var_dim))
         self.app = [] # this can be removed, plotting purposes
+        self.obj_norm = [self.objective(torch.cat(c[:-1], dim=-1), 0) for c in self.current_batch]
 
     def sample_var(self):
+        self.alpha_optimizer.zero_grad()
         with torch.no_grad():
             func_list = []
             for idx, ((f, batch_size), u) in enumerate(zip(self.funcs, self.us)):
                 func_list.append(self.sample_batch(batch_size, u, f, idx))
+        self.alpha_optimizer.step()
         return [[v.to(self.device).detach().requires_grad_() for v in fs] for fs in func_list]
 
     def sample_batch(self, batch_size, u, f, idx):
@@ -100,16 +104,16 @@ class PathSampler:
         dW = sqrt_dt * torch.randn(batch_size, self.var_dim - 1)
         X_old = torch.cat(self.current_batch[idx][:-1], dim=-1)
         with torch.enable_grad():
-            X = X_old + self.sde(X_old, (1-self.alpha)*u, self.current_batch[idx][-1], dt, dW)
+            X = X_old + self.sde(X_old, (1-self.alpha[idx])*u, self.current_batch[idx][-1], dt, dW)
         new_mask = (self.current_batch[idx][-1] + dt >= self.terminal_time).long() # (sum([(v-0.2)**2 for v in self.current_batch[idx][:-1]]) <= 0.5).long()
         old_mask = -(new_mask - 1)
         new_X = torch.cat(f([torch.zeros(size=(batch_size, 1)).uniform_() for _ in range(self.var_dim)])[:-1], dim=-1)
-        X = old_mask * X + new_mask * new_X
-        self.current_batch[idx] = [torch.clamp(X[:, None, i], min=self.domain[0], max=self.domain[1]) for i in
+        X_masked = old_mask * X + new_mask * new_X
+        self.current_batch[idx] = [torch.clamp(X_masked[:, None, i], min=self.domain[0], max=self.domain[1]) for i in
                                    range(self.var_dim - 1)] + [old_mask*(self.current_batch[idx][-1]+ dt)]
 
         if self.boundary_sampler_dependency:
-            terminal = X[new_mask.flatten() == 1, :]
+            terminal = X_masked[new_mask.flatten() == 1, :]
             length = terminal.shape[0]
             if length > 0:
                 boundary_batch = torch.cat((terminal, torch.ones(length, 1) * self.terminal_time), dim=-1)
@@ -117,16 +121,14 @@ class PathSampler:
 
         self.app.append(torch.clamp(X[0], min=-1, max=1)) # this can be removed
         with torch.enable_grad():
-            alpha_loss = (self.alpha ** 2).mean() + ((X-0.2)**2 - (X_old-0.2)**2).mean()
-            self.alpha_optimizer.zero_grad()
+            alpha_loss = (self.alpha[idx]**2).mean() + self.objective(X, (1-self.alpha[idx])*u)/self.obj_norm[idx] #+ ((X-0.2)**2).mean()
             alpha_loss.backward()
-            self.alpha_optimizer.step()
         return self.current_batch[idx]
 
-    def update(self, Js, var_samples, i):
+    def update(self, Js, var_samples):
         self.us = [self.opt_control(J, v[:-1], v[-1]).detach().cpu() for J, v in zip(Js, var_samples)] #[-0.1*(torch.cat(v[:-1], dim=-1) - 0.2).detach().cpu() for J, v in zip(Js, var_samples)] #[-6*(torch.cat(v[:-1], dim=-1) - 0.2).detach().cpu() for J, v in zip(Js, var_samples)] #
-        print(self.alpha)
         #self.alpha *= 0.999 (1-self.alpha)*
+        print(self.alpha)
 
 
 class TerminalPathSampler:
