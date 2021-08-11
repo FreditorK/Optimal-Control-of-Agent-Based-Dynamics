@@ -1,5 +1,7 @@
 import torch
 import numpy as np
+import torch.nn as nn
+from torch.optim import Adam
 
 PATH_SPACES = {
     "AC": {
@@ -68,6 +70,8 @@ class PathSampler:
         :param var_funcs: sampling functions for each variable
         :param device: cpu/gpu
         """
+        self.alpha = torch.tensor(1.0, requires_grad=True)
+        self.alpha_optimizer = Adam([self.alpha], lr=1e-3)
         self.name = args[0]
         self.device = device
         self.funcs = funcs
@@ -79,7 +83,6 @@ class PathSampler:
         self.opt_control = PATH_SPACES[self.name]["control"]
         self.domain = PATH_SPACES[self.name]["domain"]
         self.us = [torch.zeros(size=(batch_size, 1)) for f, batch_size in self.funcs]
-        self.alpha = 1
         self.boundary_sampler_dependency = False
         self.boundary_memory = torch.zeros(size=(1, var_dim))
         self.app = [] # this can be removed, plotting purposes
@@ -89,14 +92,15 @@ class PathSampler:
             func_list = []
             for idx, ((f, batch_size), u) in enumerate(zip(self.funcs, self.us)):
                 func_list.append(self.sample_batch(batch_size, u, f, idx))
-        return [[v.to(self.device).requires_grad_() for v in fs] for fs in func_list]
+        return [[v.to(self.device).detach().requires_grad_() for v in fs] for fs in func_list]
 
     def sample_batch(self, batch_size, u, f, idx):
         dt = self.terminal_time / (self.N_range*torch.ones((batch_size, 1)))
         sqrt_dt = torch.sqrt(dt)
         dW = sqrt_dt * torch.randn(batch_size, self.var_dim - 1)
-        X = torch.cat(self.current_batch[idx][:-1], dim=-1)
-        X = X + self.sde(X, u, self.current_batch[idx][-1], dt, dW)
+        X_old = torch.cat(self.current_batch[idx][:-1], dim=-1)
+        with torch.enable_grad():
+            X = X_old + self.sde(X_old, (1-self.alpha)*u, self.current_batch[idx][-1], dt, dW)
         new_mask = (self.current_batch[idx][-1] + dt >= self.terminal_time).long() # (sum([(v-0.2)**2 for v in self.current_batch[idx][:-1]]) <= 0.5).long()
         old_mask = -(new_mask - 1)
         new_X = torch.cat(f([torch.zeros(size=(batch_size, 1)).uniform_() for _ in range(self.var_dim)])[:-1], dim=-1)
@@ -112,12 +116,17 @@ class PathSampler:
                 self.boundary_memory = torch.cat((boundary_batch, self.boundary_memory[:-length]), dim=0)
 
         self.app.append(torch.clamp(X[0], min=-1, max=1)) # this can be removed
+        with torch.enable_grad():
+            alpha_loss = (self.alpha ** 2).mean() + ((X-0.2)**2 - (X_old-0.2)**2).mean()
+            self.alpha_optimizer.zero_grad()
+            alpha_loss.backward()
+            self.alpha_optimizer.step()
         return self.current_batch[idx]
 
     def update(self, Js, var_samples, i):
-        dt = self.terminal_time / self.N_range
-        self.us = [(1-self.alpha)*self.opt_control(J, v[:-1], v[-1]).detach().cpu() for J, v in zip(Js, var_samples)] #[-0.1*(torch.cat(v[:-1], dim=-1) - 0.2).detach().cpu() for J, v in zip(Js, var_samples)] #[-6*(torch.cat(v[:-1], dim=-1) - 0.2).detach().cpu() for J, v in zip(Js, var_samples)] #
-        self.alpha *= 0.999
+        self.us = [self.opt_control(J, v[:-1], v[-1]).detach().cpu() for J, v in zip(Js, var_samples)] #[-0.1*(torch.cat(v[:-1], dim=-1) - 0.2).detach().cpu() for J, v in zip(Js, var_samples)] #[-6*(torch.cat(v[:-1], dim=-1) - 0.2).detach().cpu() for J, v in zip(Js, var_samples)] #
+        print(self.alpha)
+        #self.alpha *= 0.999 (1-self.alpha)*
 
 
 class TerminalPathSampler:
