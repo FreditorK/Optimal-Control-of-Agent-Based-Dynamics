@@ -92,7 +92,7 @@ class PathSampler:
         return [[v.to(self.device).requires_grad_() for v in fs] for fs in func_list]
 
     def sample_batch(self, batch_size, u, f, idx):
-        dt = self.terminal_time / torch.randint(low=self.N_range[0], high=self.N_range[1], size=(batch_size, 1))
+        dt = self.terminal_time / (self.N_range*torch.ones((batch_size, 1)))
         sqrt_dt = torch.sqrt(dt)
         dW = sqrt_dt * torch.randn(batch_size, self.var_dim - 1)
         X = torch.cat(self.current_batch[idx][:-1], dim=-1)
@@ -115,8 +115,9 @@ class PathSampler:
         return self.current_batch[idx]
 
     def update(self, Js, var_samples, i):
+        dt = self.terminal_time / self.N_range
         self.us = [(1-self.alpha)*self.opt_control(J, v[:-1], v[-1]).detach().cpu() for J, v in zip(Js, var_samples)] #[-0.1*(torch.cat(v[:-1], dim=-1) - 0.2).detach().cpu() for J, v in zip(Js, var_samples)] #[-6*(torch.cat(v[:-1], dim=-1) - 0.2).detach().cpu() for J, v in zip(Js, var_samples)] #
-        self.alpha *= 0.998
+        self.alpha *= 0.999
 
 
 class TerminalPathSampler:
