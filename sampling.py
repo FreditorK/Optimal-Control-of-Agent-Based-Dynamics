@@ -77,7 +77,7 @@ class PathSampler:
         self.sde = PATH_SPACES[self.name]["SDE"]
         self.objective = PATH_SPACES[self.name]["objective"]
         self.current_batch = [f([torch.zeros(size=(batch_size, 1)).uniform_() for _ in range(var_dim)]) for f, batch_size in self.funcs]
-        self.alpha = [torch.ones((1, var_dim-1), requires_grad=True) for _, batch_size in self.funcs]
+        self.alpha = [torch.tensor(1.0, requires_grad=True) for _, batch_size in self.funcs]
         self.alpha_optimizer = Adam(self.alpha, lr=1e-3)
         self.terminal_time = PATH_SPACES[self.name]["terminal_time"]
         self.N_range = PATH_SPACES[self.name]["N_range"]
@@ -121,14 +121,13 @@ class PathSampler:
 
         self.app.append(torch.clamp(X[0], min=-1, max=1)) # this can be removed
         with torch.enable_grad():
-            alpha_loss = (self.alpha[idx]**2).mean() + self.objective(X, (1-self.alpha[idx])*u)/self.obj_norm[idx] #+ ((X-0.2)**2).mean()
+            alpha_loss = (self.alpha[idx]**2).mean() + 5*np.abs(self.domain[1]-self.domain[0])*((X - torch.mean(X, dim=-1, keepdim=True))**2/(self.var_dim-2)).mean() #self.objective(X, (1-self.alpha[idx])*u)/self.obj_norm[idx] #+ ((X-0.2)**2).mean()
             alpha_loss.backward()
         return self.current_batch[idx]
 
     def update(self, Js, var_samples):
         self.us = [self.opt_control(J, v[:-1], v[-1]).detach().cpu() for J, v in zip(Js, var_samples)] #[-0.1*(torch.cat(v[:-1], dim=-1) - 0.2).detach().cpu() for J, v in zip(Js, var_samples)] #[-6*(torch.cat(v[:-1], dim=-1) - 0.2).detach().cpu() for J, v in zip(Js, var_samples)] #
         #self.alpha *= 0.999 (1-self.alpha)*
-        print(self.alpha)
 
 
 class TerminalPathSampler:
