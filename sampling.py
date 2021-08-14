@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.optim import Adam
 
 PATH_SPACES = {
@@ -75,7 +76,6 @@ class PathSampler:
         self.funcs = funcs
         self.var_dim = var_dim
         self.sde = PATH_SPACES[self.name]["SDE"]
-        self.objective = PATH_SPACES[self.name]["objective"]
         self.current_batch = [f([torch.zeros(size=(batch_size, 1)).uniform_() for _ in range(var_dim)]) for f, batch_size in self.funcs]
         self.alpha = [torch.tensor(1.0, requires_grad=True) for _, batch_size in self.funcs]
         self.alpha_optimizer = Adam(self.alpha, lr=1e-3)
@@ -84,10 +84,10 @@ class PathSampler:
         self.opt_control = PATH_SPACES[self.name]["control"]
         self.domain = PATH_SPACES[self.name]["domain"]
         self.us = [torch.zeros(size=(batch_size, 1)) for f, batch_size in self.funcs]
+        self.kernel = torch.vstack(torch.ones((var_dim-1, )), -torch.ones((var_dim-1, ))).unsqueeze(0)
         self.boundary_sampler_dependency = False
         self.boundary_memory = torch.zeros(size=(1, var_dim))
         self.app = [] # this can be removed, plotting purposes
-        self.obj_norm = [self.objective(torch.cat(c[:-1], dim=-1), 0) for c in self.current_batch]
 
     def sample_var(self):
         self.alpha_optimizer.zero_grad()
@@ -121,6 +121,7 @@ class PathSampler:
 
         self.app.append(torch.clamp(X[0], min=-1, max=1)) # this can be removed
         with torch.enable_grad():
+            #print(self.alpha)
             alpha_loss = (self.alpha[idx]**2).mean() + 5*np.abs(self.domain[1]-self.domain[0])*((X - torch.mean(X, dim=-1, keepdim=True))**2/(self.var_dim-2)).mean() #self.objective(X, (1-self.alpha[idx])*u)/self.obj_norm[idx] #+ ((X-0.2)**2).mean()
             alpha_loss.backward()
         return self.current_batch[idx]
@@ -128,6 +129,13 @@ class PathSampler:
     def update(self, Js, var_samples):
         self.us = [self.opt_control(J, v[:-1], v[-1]).detach().cpu() for J, v in zip(Js, var_samples)] #[-0.1*(torch.cat(v[:-1], dim=-1) - 0.2).detach().cpu() for J, v in zip(Js, var_samples)] #[-6*(torch.cat(v[:-1], dim=-1) - 0.2).detach().cpu() for J, v in zip(Js, var_samples)] #
         #self.alpha *= 0.999 (1-self.alpha)*
+
+    def weigthed_p_ws_dist(self, X, ts, p=2):
+        X, _ = torch.sort(X, dim=-1)
+        ts, ts_idxs = torch.sort(ts, dim=0)
+        X_reordered = X[ts_idxs].unsqueeze(0)
+        X_conv = F.conv2d(X_reordered, self.kernel).squeeze(0)
+        return (ts/self.terminal_time)*torch.mean(torch.abs(X_conv) ** p, dim=-1, keepdims=True)  # **(1/p)
 
 
 class TerminalPathSampler:
