@@ -84,7 +84,6 @@ class PathSampler:
         self.opt_control = PATH_SPACES[self.name]["control"]
         self.domain = PATH_SPACES[self.name]["domain"]
         self.us = [torch.zeros(size=(batch_size, 1)) for f, batch_size in self.funcs]
-        self.kernel = torch.vstack(torch.ones((var_dim-1, )), -torch.ones((var_dim-1, ))).unsqueeze(0)
         self.boundary_sampler_dependency = False
         self.boundary_memory = torch.zeros(size=(1, var_dim))
         self.app = [] # this can be removed, plotting purposes
@@ -109,6 +108,13 @@ class PathSampler:
         old_mask = -(new_mask - 1)
         new_X = torch.cat(f([torch.zeros(size=(batch_size, 1)).uniform_() for _ in range(self.var_dim)])[:-1], dim=-1)
         X_masked = old_mask * X + new_mask * new_X
+
+        with torch.enable_grad():
+            dist = self.weigthed_p_ws_dist(X, self.current_batch[idx][-1]).mean()
+            print(self.alpha[0].detach().item(), 4*dist.detach().item())
+            alpha_loss = (self.alpha[idx]**2).mean() + 4*dist#5*np.abs(self.domain[1]-self.domain[0])*((X - torch.mean(X, dim=-1, keepdim=True))**2/(self.var_dim-2)).mean() #self.objective(X, (1-self.alpha[idx])*u)/self.obj_norm[idx] #+ ((X-0.2)**2).mean()
+            alpha_loss.backward()
+
         self.current_batch[idx] = [torch.clamp(X_masked[:, None, i], min=self.domain[0], max=self.domain[1]) for i in
                                    range(self.var_dim - 1)] + [old_mask*(self.current_batch[idx][-1]+ dt)]
 
@@ -120,10 +126,7 @@ class PathSampler:
                 self.boundary_memory = torch.cat((boundary_batch, self.boundary_memory[:-length]), dim=0)
 
         self.app.append(torch.clamp(X[0], min=-1, max=1)) # this can be removed
-        with torch.enable_grad():
-            #print(self.alpha)
-            alpha_loss = (self.alpha[idx]**2).mean() + 5*np.abs(self.domain[1]-self.domain[0])*((X - torch.mean(X, dim=-1, keepdim=True))**2/(self.var_dim-2)).mean() #self.objective(X, (1-self.alpha[idx])*u)/self.obj_norm[idx] #+ ((X-0.2)**2).mean()
-            alpha_loss.backward()
+
         return self.current_batch[idx]
 
     def update(self, Js, var_samples):
@@ -133,9 +136,9 @@ class PathSampler:
     def weigthed_p_ws_dist(self, X, ts, p=2):
         X, _ = torch.sort(X, dim=-1)
         ts, ts_idxs = torch.sort(ts, dim=0)
-        X_reordered = X[ts_idxs].unsqueeze(0)
-        X_conv = F.conv2d(X_reordered, self.kernel).squeeze(0)
-        return (ts/self.terminal_time)*torch.mean(torch.abs(X_conv) ** p, dim=-1, keepdims=True)  # **(1/p)
+        X_reordered = X[ts_idxs.flatten()]
+        X_conv = X_reordered[1:] - X_reordered[:-1]
+        return (ts[1:]/self.terminal_time)*torch.mean(torch.abs(X_conv) ** p, dim=-1, keepdims=True)  # **(1/p)
 
 
 class TerminalPathSampler:
