@@ -110,9 +110,7 @@ class PathSampler:
         X_masked = old_mask * X + new_mask * new_X
 
         with torch.enable_grad():
-            dist = self.weigthed_p_ws_dist(X, self.current_batch[idx][-1]).mean()
-            print(self.alpha[0].detach().item(), 4*dist.detach().item())
-            alpha_loss = (self.alpha[idx]**2).mean() + 4*dist#5*np.abs(self.domain[1]-self.domain[0])*((X - torch.mean(X, dim=-1, keepdim=True))**2/(self.var_dim-2)).mean() #self.objective(X, (1-self.alpha[idx])*u)/self.obj_norm[idx] #+ ((X-0.2)**2).mean()
+            alpha_loss = (self.alpha[idx]**2).mean() + 4*self.weigthed_p_ws_dist(X, self.current_batch[idx][-1]).mean()#5*np.abs(self.domain[1]-self.domain[0])*((X - torch.mean(X, dim=-1, keepdim=True))**2/(self.var_dim-2)).mean() #self.objective(X, (1-self.alpha[idx])*u)/self.obj_norm[idx] #+ ((X-0.2)**2).mean()
             alpha_loss.backward()
 
         self.current_batch[idx] = [torch.clamp(X_masked[:, None, i], min=self.domain[0], max=self.domain[1]) for i in
@@ -130,8 +128,7 @@ class PathSampler:
         return self.current_batch[idx]
 
     def update(self, Js, var_samples):
-        self.us = [self.opt_control(J, v[:-1], v[-1]).detach().cpu() for J, v in zip(Js, var_samples)] #[-0.1*(torch.cat(v[:-1], dim=-1) - 0.2).detach().cpu() for J, v in zip(Js, var_samples)] #[-6*(torch.cat(v[:-1], dim=-1) - 0.2).detach().cpu() for J, v in zip(Js, var_samples)] #
-        #self.alpha *= 0.999 (1-self.alpha)*
+        self.us = [self.opt_control(J, v[:-1], v[-1]).detach().cpu() for J, v in zip(Js, var_samples)]
 
     def weigthed_p_ws_dist(self, X, ts, p=2):
         X, _ = torch.sort(X, dim=-1)

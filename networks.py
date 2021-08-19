@@ -1,7 +1,6 @@
 import torch.nn as nn
 import torch
-from itertools import product
-from torchdyn.models import NeuralDE
+from activation_functions import *
 
 
 class DENSNetwork(nn.Module):
@@ -87,7 +86,6 @@ class GRUNetwork(nn.Module):
 
         self.numerator_1 = nn.GRUCell(input_dim, hidden_dim)
         self.numerator_2 = nn.GRUCell(input_dim, hidden_dim)
-        self.numerator_3 = nn.GRUCell(input_dim, hidden_dim)
 
         self.numerator = nn.Linear(hidden_dim, output_dim)
         self.denominator = nn.Linear(hidden_dim, output_dim)
@@ -104,7 +102,6 @@ class GRUNetwork(nn.Module):
         N = self.init_numerator(xt)
         N = self.numerator_1(xt, N)
         N = self.numerator_2(xt, N)
-        N = self.numerator_3(xt, N)
         N_f = self.numerator(N)
 
         D = self.init_denominator(xt)
@@ -135,16 +132,18 @@ class ResLayer(nn.Module):
 
     def __init__(self, input_dim, hidden_dim, output_dim):
         super(ResLayer, self).__init__()
-        self.net = nn.Sequential(
+        self.main = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.SiLU(),
-            nn.Linear(hidden_dim, output_dim)
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SiLU(),
+            nn.Linear(hidden_dim, output_dim),
         )
 
         self.shortcut = nn.Linear(input_dim, output_dim)
 
     def forward(self, x):
-        return self.net(x) + self.shortcut(x)
+        return self.main(x) + self.shortcut(x)
 
 
 class MININetwork(nn.Module):
@@ -169,9 +168,11 @@ class FeedForwardNetwork(nn.Module):
         super(FeedForwardNetwork, self).__init__()
         self.y_net = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            nn.SiLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.SiLU(),
+            PSiLU(),
+            nn.Linear(hidden_dim, 2 * hidden_dim),
+            PSiLU(),
+            nn.Linear(2 * hidden_dim, hidden_dim),
+            PSiLU(),
             nn.Linear(hidden_dim, output_dim),
         )
 
@@ -202,7 +203,7 @@ class DENSEMeanNetwork(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super(DENSEMeanNetwork, self).__init__()
         self.net = nn.Sequential(
-            DenseBlock(input_dim+1, 2 * hidden_dim, hidden_dim),
+            DenseBlock(input_dim + 1, 2 * hidden_dim, hidden_dim),
             DenseBlock(hidden_dim, 2 * hidden_dim, hidden_dim),
             DenseBlock(hidden_dim, 2 * hidden_dim, output_dim)
         )
@@ -219,27 +220,27 @@ class DenseBlock(nn.Module):
         super(DenseBlock, self).__init__()
         self.net_1 = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            nn.SiLU()
+            PSiLU()
         )
 
         self.net_2 = nn.Sequential(
             nn.Linear(input_dim + hidden_dim, hidden_dim),
-            nn.SiLU()
+            PSiLU()
         )
 
         self.net_3 = nn.Sequential(
             nn.Linear(input_dim + 2 * hidden_dim, hidden_dim),
-            nn.SiLU()
+            PSiLU()
         )
 
         self.net_4 = nn.Sequential(
             nn.Linear(input_dim + 3 * hidden_dim, hidden_dim),
-            nn.SiLU()
+            PSiLU()
         )
 
         self.net_5 = nn.Sequential(
             nn.Linear(input_dim + 4 * hidden_dim, hidden_dim),
-            nn.SiLU(),
+            PSiLU(),
             nn.Linear(hidden_dim, output_dim)
         )
 
