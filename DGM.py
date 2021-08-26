@@ -144,20 +144,24 @@ class DGMPIASolver(Solver):
         self.delay_control = model_config["delay_control"]
         self.control_vars = hbj_config.control_vars
         self.domain_sampler = SAMPLING_METHODS[self.sampling_method](hbj_config.domain_func, hbj_config.var_dim_J,
-                                                                     device=self.device)
-        self.boundary_sampler_J = SAMPLING_METHODS[self.sampling_method](hbj_config.boundary_func_J,
-                                                                         hbj_config.var_dim_J, hbj_config.__class__.__name__,
-                                                                         device=self.device)
+                                                                     self.device, hbj_config.__class__.__name__)
+        self.boundary_sampler_J = SAMPLING_METHODS[self.sampling_method_boundary + "_bound"](hbj_config.boundary_func_J,
+                                                                                           hbj_config.var_dim_J,
+                                                                                           self.device,
+                                                                                           hbj_config.__class__.__name__,
+                                                                                           self.domain_sampler)
+
         self.boundary_sampler_u = SAMPLING_METHODS[self.sampling_method_boundary](hbj_config.boundary_func_u,
-                                                                         len(self.control_vars), hbj_config.__class__.__name__,
-                                                                         device=self.device)
+                                                                                  len(self.control_vars),
+                                                                                  self.device, hbj_config.__class__.__name__,
+                                                                                  self.domain_sampler)
 
         self.f_θ = NETWORK_TYPES[self.network_type](input_dim=hbj_config.var_dim_J,
-                                                    hidden_dim=model_config["hidden_dim"],
+                                                    hidden_dim=model_config["hidden_dim_J"],
                                                     output_dim=1).to(self.device)  # value_function of (x, t)_J
 
         self.g_φ = NETWORK_TYPES[self.network_type](input_dim=len(self.control_vars),
-                                                    hidden_dim=model_config["hidden_dim"],
+                                                    hidden_dim=model_config["hidden_dim_u"],
                                                     output_dim=hbj_config.sol_dim).to(
             self.device)  # control_function of (x, t)_u
 

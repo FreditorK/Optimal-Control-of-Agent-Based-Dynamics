@@ -7,7 +7,7 @@ class DENSNetwork(nn.Module):
 
     def __init__(self, input_dim, hidden_dim, output_dim):
         super().__init__()
-        self.net = GRUNetwork(input_dim, hidden_dim, output_dim)
+        self.net = RESNetwork(input_dim, hidden_dim, output_dim)
 
     def forward(self, *vars):
         return torch.exp(self.net(*vars))
@@ -19,7 +19,7 @@ class DGMNetwork(nn.Module):
         super(DGMNetwork, self).__init__()
         self.init_layer = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            nn.ELU()
+            nn.Tanh()
         )
 
         self.layer_1 = DGMLayer(input_dim, hidden_dim)
@@ -73,7 +73,7 @@ class GRUNetwork(nn.Module):
 
         self.init_denominator = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            nn.SiLU(),
+            nn.ELU(),
         )
 
         self.denominator_1 = nn.GRUCell(input_dim, hidden_dim)
@@ -81,18 +81,19 @@ class GRUNetwork(nn.Module):
 
         self.init_numerator = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            nn.SiLU(),
+            nn.ELU(),
         )
 
         self.numerator_1 = nn.GRUCell(input_dim, hidden_dim)
         self.numerator_2 = nn.GRUCell(input_dim, hidden_dim)
+        self.numerator_3 = nn.GRUCell(input_dim, hidden_dim)
 
         self.numerator = nn.Linear(hidden_dim, output_dim)
         self.denominator = nn.Linear(hidden_dim, output_dim)
 
         self.interpolator = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            nn.SiLU(),
+            nn.ELU(),
             nn.Linear(hidden_dim, 1),
             nn.Sigmoid()
         )
@@ -102,6 +103,7 @@ class GRUNetwork(nn.Module):
         N = self.init_numerator(xt)
         N = self.numerator_1(xt, N)
         N = self.numerator_2(xt, N)
+        N = self.numerator_3(xt, N)
         N_f = self.numerator(N)
 
         D = self.init_denominator(xt)
@@ -110,7 +112,7 @@ class GRUNetwork(nn.Module):
 
         I = self.interpolator(xt)
 
-        return I * N_f + (1 - I) * torch.div(N_f, torch.exp(self.denominator(D)))
+        return I * N_f + (1-I) * torch.div(N_f, torch.exp(self.denominator(D)))
 
 
 class RESNetwork(nn.Module):
@@ -119,13 +121,15 @@ class RESNetwork(nn.Module):
         super(RESNetwork, self).__init__()
         self.net = nn.Sequential(
             ResLayer(input_dim, hidden_dim, 2 * hidden_dim),
-            ResLayer(2 * hidden_dim, 4 * hidden_dim, 2 * hidden_dim),
+            ResLayer(2 * hidden_dim, 2 * hidden_dim, 2 * hidden_dim),
             ResLayer(2 * hidden_dim, hidden_dim, output_dim)
         )
 
+        self.skip = nn.Linear(input_dim, output_dim)
+
     def forward(self, *vars):
         xt = torch.cat(vars, dim=1)
-        return self.net(xt)
+        return self.net(xt) + self.skip(xt)
 
 
 class ResLayer(nn.Module):
@@ -168,11 +172,11 @@ class FeedForwardNetwork(nn.Module):
         super(FeedForwardNetwork, self).__init__()
         self.y_net = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            PSiLU(),
+            nn.SiLU(),
             nn.Linear(hidden_dim, 2 * hidden_dim),
-            PSiLU(),
+            nn.SiLU(),
             nn.Linear(2 * hidden_dim, hidden_dim),
-            PSiLU(),
+            nn.SiLU(),
             nn.Linear(hidden_dim, output_dim),
         )
 
