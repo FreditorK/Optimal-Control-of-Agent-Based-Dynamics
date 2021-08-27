@@ -156,7 +156,7 @@ class MININetwork(nn.Module):
         super(MININetwork, self).__init__()
         self.y_net = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            nn.ELU(),
+            nn.SiLU(),
             nn.Linear(hidden_dim, output_dim)
         )
 

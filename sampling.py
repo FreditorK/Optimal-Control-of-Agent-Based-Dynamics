@@ -104,17 +104,17 @@ class PathSampler:
         X_old = torch.cat(self.current_batch[idx][:-1], dim=-1)
         with torch.enable_grad():
             X = X_old + self.sde(X_old, (1-self.alpha[idx])*u, self.current_batch[idx][-1], dt, dW)
-        new_mask = (self.current_batch[idx][-1] + dt >= self.terminal_time).long() # (sum([(v-0.2)**2 for v in self.current_batch[idx][:-1]]) <= 0.5).long()
+        new_mask = (self.current_batch[idx][-1] + dt >= self.terminal_time).long()
         old_mask = -(new_mask - 1)
         new_X = torch.cat(f([torch.zeros(size=(batch_size, 1)).uniform_() for _ in range(self.var_dim)])[:-1], dim=-1)
         X_masked = old_mask * X + new_mask * new_X
 
         with torch.enable_grad():
-            alpha_loss = (self.alpha[idx]**2).mean() + 4*self.weigthed_p_ws_dist(X, self.current_batch[idx][-1]).mean()#5*np.abs(self.domain[1]-self.domain[0])*((X - torch.mean(X, dim=-1, keepdim=True))**2/(self.var_dim-2)).mean() #self.objective(X, (1-self.alpha[idx])*u)/self.obj_norm[idx] #+ ((X-0.2)**2).mean()
+            alpha_loss = (self.alpha[idx]**2).mean() + self.weigthed_p_ws_dist(X, self.current_batch[idx][-1]).sum()
             alpha_loss.backward()
 
         self.current_batch[idx] = [torch.clamp(X_masked[:, None, i], min=self.domain[0], max=self.domain[1]) for i in
-                                   range(self.var_dim - 1)] + [old_mask*(self.current_batch[idx][-1]+ dt)]
+                                   range(self.var_dim - 1)] + [torch.fmod(self.current_batch[idx][-1]+ dt, self.terminal_time)]
 
         if self.boundary_sampler_dependency:
             terminal = X_masked[new_mask.flatten() == 1, :]
@@ -131,9 +131,9 @@ class PathSampler:
         self.us = [self.opt_control(J, v[:-1], v[-1]).detach().cpu() for J, v in zip(Js, var_samples)]
 
     def weigthed_p_ws_dist(self, X, ts, p=2):
-        X, _ = torch.sort(X, dim=-1)
-        ts, ts_idxs = torch.sort(ts, dim=0)
+        ts, ts_idxs = torch.topk(ts, 2, dim=0)
         X_reordered = X[ts_idxs.flatten()]
+        X_reordered, _ = torch.sort(X_reordered, dim=-1)
         X_conv = X_reordered[1:] - X_reordered[:-1]
         return (ts[1:]/self.terminal_time)*torch.mean(torch.abs(X_conv) ** p, dim=-1, keepdims=True)  # **(1/p)
 
