@@ -112,7 +112,7 @@ class GRUNetwork(nn.Module):
 
         I = self.interpolator(xt)
 
-        return I * N_f + (1-I) * torch.div(N_f, torch.exp(self.denominator(D)))
+        return I * N_f + (1 - I) * torch.div(N_f, torch.exp(self.denominator(D)))
 
 
 class RESNetwork(nn.Module):
@@ -176,6 +176,30 @@ class FeedForwardNetwork(nn.Module):
             nn.Linear(hidden_dim, 2 * hidden_dim),
             nn.SiLU(),
             nn.Linear(2 * hidden_dim, hidden_dim),
+            nn.SiLU(),
+            nn.Linear(hidden_dim, output_dim),
+        )
+
+    def forward(self, *vars):
+        xt = torch.cat(vars, dim=1)
+        weights = self.y_net(xt)
+        return weights
+
+
+class FeedForwardNetwork2(nn.Module):
+
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(FeedForwardNetwork2, self).__init__()
+        self.y_net = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.SiLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SiLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SiLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SiLU(),
+            nn.Linear(hidden_dim, hidden_dim),
             nn.SiLU(),
             nn.Linear(hidden_dim, output_dim),
         )
@@ -280,5 +304,6 @@ NETWORK_TYPES = {
     "FF": FeedForwardNetwork,
     "RESMEAN": RESMeanNetwork,
     "DENSE": DENSENetwork,
-    "DENSEMEAN": DENSEMeanNetwork
+    "DENSEMEAN": DENSEMeanNetwork,
+    "FF2": FeedForwardNetwork2,
 }
