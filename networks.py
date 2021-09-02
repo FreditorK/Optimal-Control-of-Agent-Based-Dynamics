@@ -192,15 +192,15 @@ class FeedForwardNetwork2(nn.Module):
         super(FeedForwardNetwork2, self).__init__()
         self.y_net = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            nn.SiLU(),
+            nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.SiLU(),
+            nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.SiLU(),
+            nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.SiLU(),
+            nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.SiLU(),
+            nn.ReLU(),
             nn.Linear(hidden_dim, output_dim),
         )
 
