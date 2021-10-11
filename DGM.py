@@ -49,6 +49,8 @@ class Solver(ABC):
         ...
 
     def save(self, path):
+        directory, _ = os.path.split(os.path.abspath(__file__))
+        path = os.path.join(directory, path)
         torch.save(self.saveables, path)
 
     def load(self, path):
@@ -98,6 +100,8 @@ class DeepPDESolver(Solver):
             "f_theta_optimizer": self.f_θ_optimizer
         }
 
+        self.ls = []
+
     def u(self, *args):
         with torch.no_grad():
             xs = [torch.FloatTensor([x]).to(self.device).unsqueeze(0) for x in args]
@@ -113,7 +117,26 @@ class DeepPDESolver(Solver):
         domain_var_sample = self.domain_sampler.sample_var()  # (func(vars), batch, 1)
         boundary_vars_sample = self.boundary_sampler.sample_var()  # (subdomain(vars), batch, 1)
 
-        return domain_var_sample, boundary_vars_sample
+        '''
+        # temporarry
+        domain_u = [self.f_θ(*sample) for sample in domain_var_sample]
+        boundary_us = [self.f_θ(*sample) for sample in boundary_vars_sample]
+        boundary_loss = self.boundary_criterion(boundary_us, vars=boundary_vars_sample)
+        domain_loss = self.domain_criterion(domain_u, vars=domain_var_sample)
+        l = domain_loss + boundary_loss
+        self.ls.append(l.detach().cpu().numpy())
+        self.f_θ_optimizer.zero_grad()
+        with torch.no_grad():
+            t = 5*torch.zeros((128, 1)).uniform_().cuda()
+            d = [((torch.zeros((128, 1)).uniform_().cuda()-0.5)*2) for _ in
+                 range(10)] + [t]
+            b = [((torch.zeros((128, 1)).uniform_().cuda())-0.5)*2 for _ in range(10)] + [
+                (5*torch.ones((128, 1)).cuda())]
+        d = [a.requires_grad_() for a in d]
+        b = [a.requires_grad_() for a in b]
+        '''
+
+        return domain_var_sample, boundary_vars_sample # [d], [b] #
 
     def backprop_loss(self, i, domain_var_sample, boundary_vars_sample):
         domain_u = [self.f_θ(*sample) for sample in domain_var_sample]
@@ -130,7 +153,7 @@ class DeepPDESolver(Solver):
         loss.backward()
         self.f_θ_optimizer.step()
 
-        #self.scheduler.step(loss)
+        self.scheduler.step(loss)
 
         return loss.cpu().detach().flatten()[0].numpy()
 

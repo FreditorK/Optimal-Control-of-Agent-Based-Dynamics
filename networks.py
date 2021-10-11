@@ -295,6 +295,25 @@ class DENSENetwork(nn.Module):
         return self.net(xt)
 
 
+class WassersteinNetwork(nn.Module):
+
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(WassersteinNetwork, self).__init__()
+        self.net = nn.Sequential(
+            ResLayer(input_dim, hidden_dim, 2 * hidden_dim),
+            ResLayer(2 * hidden_dim, 2 * hidden_dim, 2 * hidden_dim),
+            ResLayer(2 * hidden_dim, hidden_dim, output_dim)
+        )
+
+        self.skip = nn.Linear(input_dim, output_dim)
+
+    def forward(self, *vars):
+        xt = torch.cat(vars, dim=1)
+        xt, _ = torch.sort(xt, dim=-1)
+        xt = self.net(xt) + self.skip(xt)
+        return xt
+
+
 NETWORK_TYPES = {
     "DGM": DGMNetwork,
     "GRU": GRUNetwork,
@@ -306,4 +325,5 @@ NETWORK_TYPES = {
     "DENSE": DENSENetwork,
     "DENSEMEAN": DENSEMeanNetwork,
     "FF2": FeedForwardNetwork2,
+    "WS": WassersteinNetwork
 }
