@@ -1,6 +1,6 @@
+from .activation_functions import *
 import torch.nn as nn
 import torch
-from activation_functions import *
 
 
 class DENSNetwork(nn.Module):

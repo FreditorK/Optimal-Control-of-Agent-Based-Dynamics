@@ -1,8 +1,8 @@
+from .optimisers import OPTIMIZERS
+from .operators import D
 import torch
-from optimisers import OPTIMIZERS
-from operators import D
 from tqdm import tqdm
-from networks import NETWORK_TYPES
+from .networks import NETWORK_TYPES
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.autograd import Variable
 import numpy as np
@@ -76,7 +76,7 @@ class FBSDESolver:
         return X_preds, Y_preds, ts
 
     def train(self, iterations):
-        X = self.init_sampling_func(torch.rand(self.batch_size, self.var_dim)).detach().cuda().requires_grad_()
+        X = self.init_sampling_func(torch.rand(self.batch_size, self.var_dim)).detach().to(self.device).requires_grad_()
         iterations = tqdm(range(iterations), leave=True, unit=" it")
         for _ in iterations:
             loss = self.train_for_iteration(X)
@@ -96,8 +96,8 @@ class FBSDESolver:
             t = Variable(self.dt * i)
             sigma = self.sigma(X, t)
             K = torch.zeros(self.batch_size, self.var_dim).uniform_(-self.control_noise,
-                                                                    self.control_noise).cuda().detach()  # torch.einsum("bij, bj -> bi", (-self.inv_D @ M), Z)
-            dW = sqrt_dt * torch.randn(self.batch_size, self.var_dim).cuda()
+                                                                    self.control_noise).to(self.device).detach()  # torch.einsum("bij, bj -> bi", (-self.inv_D @ M), Z)
+            dW = sqrt_dt * torch.randn(self.batch_size, self.var_dim).to(self.device)
             X = X + self.b(X, t) * self.dt + torch.einsum("bij, bj -> bi", sigma, dW) \
                 + torch.einsum("bij, bj -> bi", sigma, K) * self.dt
             Y = Y - self.h(X, Y, Z, t) * self.dt \

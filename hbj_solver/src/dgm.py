@@ -1,13 +1,12 @@
-from sampling import SAMPLING_METHODS
-from networks import NETWORK_TYPES
-from operators import div
+from .sampling import SAMPLING_METHODS
+from .networks import NETWORK_TYPES
+from .operators import div, D
+from .optimisers import OPTIMIZERS
 from tqdm import tqdm
 from abc import ABC, abstractmethod
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from optimisers import OPTIMIZERS
 import torch
 import os.path
-from operators import D
 
 
 class Solver(ABC):

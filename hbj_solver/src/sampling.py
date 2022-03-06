@@ -1,7 +1,5 @@
 import torch
 import numpy as np
-import torch.nn as nn
-import torch.nn.functional as F
 from torch.optim import Adam
 from torch.quasirandom import SobolEngine
 
@@ -110,15 +108,10 @@ class PathSampler:
         self.N_range = PATH_SPACES[self.name]["N_range"]
         self.opt_control = PATH_SPACES[self.name]["control"]
         self.domain = PATH_SPACES[self.name]["domain"]
+        self.x_d = PATH_SPACES[self.name]["target_measure"]
         self.us = [torch.zeros(size=(batch_size, 1)) for f, batch_size in self.funcs]
         self.boundary_sampler_dependency = False
         self.boundary_memory = torch.zeros(size=(1, var_dim))
-        #self.app = [] # this can be removed, plotting purposes
-        self.app_2 = [] # this can be removed, plotting purposes
-
-        #warmup
-        #for _ in range(100):
-            #self.sample_var()
 
     def sample_var(self):
         self.alpha_optimizer.zero_grad()
@@ -142,7 +135,7 @@ class PathSampler:
         X_masked = old_mask * X + new_mask * new_X
 
         with torch.enable_grad():
-            alpha_loss = (self.alpha[idx]**2).mean() #+ 4*self.weigthed_p_ws_dist(X, self.current_batch[idx][-1]).mean()
+            alpha_loss = (self.alpha[idx]**2).mean() + self.weigthed_p_ws_dist(X, self.current_batch[idx][-1]).mean()
             alpha_loss.backward()
 
         self.current_batch[idx] = [torch.clamp(X_masked[:, None, i], min=self.domain[0], max=self.domain[1]) for i in
@@ -155,22 +148,14 @@ class PathSampler:
                 boundary_batch = torch.cat((terminal, torch.ones(length, 1) * self.terminal_time), dim=-1)
                 self.boundary_memory = torch.cat((boundary_batch, self.boundary_memory[:-length]), dim=0)
 
-        #self.app.append(torch.clamp(X[0], min=-1, max=1)) # this can be removed
-
         return self.current_batch[idx]
 
     def update(self, Js, var_samples, i):
         self.us = [self.opt_control(J, v[:-1], v[-1]).detach().cpu() for J, v in zip(Js, var_samples)]
-        if i % 90 == 0:
-            self.app_2.append(torch.cat(self.current_batch[0], dim=-1))  # this can be removed
 
-    def weigthed_p_ws_dist(self, X, ts, k=2, p=2):
-        ts, ts_idxs = torch.topk(ts, k, dim=0)
-        X_reordered = X[ts_idxs.flatten()]
-        X_reordered, _ = torch.sort(X_reordered, dim=-1)
-        X_reordered[-1, :] = 0.2
-        X_conv = X_reordered[1:] - X_reordered[:-1]
-        dist = (ts[1:]/self.terminal_time)*torch.mean(torch.abs(X_conv) ** p, dim=-1, keepdims=True)  # **(1/p)
+    def weigthed_p_ws_dist(self, X, ts, p=2):
+        X_reordered, _ = torch.sort(X, dim=-1)
+        dist = (ts/self.terminal_time)*torch.mean(torch.abs(X_reordered - self.x_d) ** p, dim=-1, keepdims=True)  # **(1/p)
         return dist
 
 
