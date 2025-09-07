@@ -1,11 +1,11 @@
 Implementation of the Deep Galerkin Method for Hamilton-Jacobi-Bellman equations
 
- @misc{kelbel_2022, 
- title={Optimal Control of Agent-Based Dynamics under Deep Galerkin Feedback Laws}, 
- url={https://www.researchgate.net/publication/361749390_Optimal_Control_of_Agent-Based_Dynamics_under_Deep_Galerkin_Feedback_Laws}, 
- journal={ResearchGate}, 
- publisher={ResearchGate}, 
- author={Kelbel, Frederik},
- year={2022}, 
- month={Apr}
- } 
+@misc{kelbel2024optimalcontrolagentbaseddynamics,
+      title={Optimal Control of Agent-Based Dynamics under Deep Galerkin Feedback Laws}, 
+      author={Frederik Kelbel},
+      year={2024},
+      eprint={2406.09141},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2406.09141}, 
+      }
